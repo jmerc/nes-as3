@@ -2,6 +2,7 @@ package net.johnmercer.nes
 {
 	import flash.display.Sprite;
 	import flash.events.Event;
+	import flash.text.Font;
 	import net.johnmercer.nes.view.Emulator;
 	
 	/**
@@ -35,7 +36,10 @@ package net.johnmercer.nes
 			graphics.drawRect(0, 0, _width, _height);
 			graphics.endFill();
 			
+			
 			removeEventListener(Event.ADDED_TO_STAGE, init);
+			
+			
 			var _emulator:Emulator = new Emulator(_width, _height);
 			
 			

@@ -1,4 +1,4 @@
-package net.johnmercer.nes.system 
+package net.johnmercer.nes.system
 {
 	import flash.events.*;
 	import flash.net.*;
@@ -11,81 +11,81 @@ package net.johnmercer.nes.system
 	 * ...
 	 * @author John Owen Mercer
 	 */
-	public class ROM 
+	public class ROM
 	{
-		private var flag6:uint;
-		private var flag7:uint;
-		private var prgRamSize:uint;
-		private var flag9:uint;
-		private var flag10:uint;
-		private var sram:Boolean;
-		private var trainer:Boolean;
-		private var mapper:uint;
-		private var TVSystem:uint;
-		private var nes2Header:Boolean;
-		private var trainerRom:ByteArray;
-		private var prgRom:ByteArray;
-		private var chrRom:ByteArray;
-		private var emulatorView:Emulator;
-		private var header:ByteArray;
-		private var validFile:Boolean;
-		private var prgRomSize:uint;
-		private var chrRomSize:uint;
-		private var chrRam:Boolean;
+		// Flags
+		private var _loading:Boolean;
+		private var _validFile:Boolean;
+		private var _sram:Boolean;
+		private var _chrRam:Boolean;
+		private var _trainer:Boolean;
+		private var _mapper:uint;
+		private var _TVSystem:uint;
 		
-		private var loading:Boolean;
-		private var fileLoader:URLLoader;
+		// Memory Blocks
+		private var _trainerRom:ByteArray;
+		private var _prgRom:ByteArray;
+		private var _chrRom:ByteArray;
 		
-		public function ROM(view:Emulator) 
+		// View
+		private var _emulatorView:Emulator;
+		
+		private var _fileLoader:URLLoader;
+		
+		public function ROM(view:Emulator)
 		{
-			emulatorView = view;
-			validFile = false;
-			loading = false;
-		}	
+			_emulatorView = view;
+			_validFile = false;
+			_loading = false;
+		}
 		
 		public function loadFile(fileName:String):void
 		{
 			// Read in file
 			var fileRequest:URLRequest = new URLRequest(fileName);
-			fileLoader = new URLLoader(fileRequest);
-			fileLoader.dataFormat = URLLoaderDataFormat.BINARY;
+			_fileLoader = new URLLoader(fileRequest);
+			_fileLoader.dataFormat = URLLoaderDataFormat.BINARY;
 			
-			fileLoader.addEventListener(Event.COMPLETE, onFileLoaded);
-			fileLoader.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onFileLoadError);
-			fileLoader.addEventListener(IOErrorEvent.IO_ERROR, onFileLoadError);
+			_fileLoader.addEventListener(Event.COMPLETE, onFileLoaded);
+			_fileLoader.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onFileLoadError);
+			_fileLoader.addEventListener(IOErrorEvent.IO_ERROR, onFileLoadError);
 			
-			loading = true;
+			_loading = true;
 		}
 		
 		private function onFileLoaded(e:Event):void
 		{
-			fileLoader.removeEventListener(Event.COMPLETE, onFileLoaded);
-			fileLoader.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onFileLoadError);
-			fileLoader.removeEventListener(IOErrorEvent.IO_ERROR, onFileLoadError);
-
-			loading = false;
-			var romData:ByteArray = fileLoader.data;
+			_fileLoader.removeEventListener(Event.COMPLETE, onFileLoaded);
+			_fileLoader.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onFileLoadError);
+			_fileLoader.removeEventListener(IOErrorEvent.IO_ERROR, onFileLoadError);
 			
-			emulatorView.log("File Loaded, Size: " + romData.bytesAvailable);
+			_loading = false;
+			var romData:ByteArray = _fileLoader.data;
+			
+			_emulatorView.log("File Loaded, Size: " + romData.bytesAvailable);
 			parseRom(romData);
-			
+		
 		}
 		
 		private function onFileLoadError(e:Event):void
 		{
-			fileLoader.removeEventListener(Event.COMPLETE, onFileLoaded);
-			fileLoader.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onFileLoadError);
-			fileLoader.removeEventListener(IOErrorEvent.IO_ERROR, onFileLoadError);
-
-			loading = false;
-			emulatorView.log("FileLoadError: " + e.type);
+			_fileLoader.removeEventListener(Event.COMPLETE, onFileLoaded);
+			_fileLoader.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onFileLoadError);
+			_fileLoader.removeEventListener(IOErrorEvent.IO_ERROR, onFileLoadError);
+			
+			_loading = false;
+			_emulatorView.log("FileLoadError: " + e.type);
 		}
 		
 		private function parseRom(romData:ByteArray):void
 		{
+			var header:ByteArray;
+			var prgRomSize:uint;
+			var chrRomSize:uint;
+			
 			if (romData.bytesAvailable < 16)
 			{
-				emulatorView.log("parseRom: Invalid file length");
+				_emulatorView.log("parseRom: Invalid file length");
 				return;
 			}
 			
@@ -93,93 +93,184 @@ package net.johnmercer.nes.system
 			romData.readBytes(header, 0, 16);
 			
 			// Look for iNES sentinel
-			validFile = header.readUnsignedByte() == 0x4E ? true : false;
-			validFile = header.readUnsignedByte() == 0x45 ? validFile && true : false;
-			validFile = header.readUnsignedByte() == 0x53 ? validFile && true : false;
-			validFile = header.readUnsignedByte() == 0x1A ? validFile && true : false;
-			if (validFile == false)
+			_validFile = header.readUnsignedByte() == 0x4E ? true : false;
+			_validFile = header.readUnsignedByte() == 0x45 ? _validFile && true : false;
+			_validFile = header.readUnsignedByte() == 0x53 ? _validFile && true : false;
+			_validFile = header.readUnsignedByte() == 0x1A ? _validFile && true : false;
+			if (_validFile == false)
 			{
-				emulatorView.log("parseRom: Invalid Header Tag");
+				_emulatorView.log("parseRom: Invalid Header Tag");
 				return;
 			}
 			
 			prgRomSize = header.readUnsignedByte() * 16384;
 			chrRomSize = header.readUnsignedByte() * 8192;
-			chrRam = chrRomSize == 0 ? true : false;
-			flag6 = header.readUnsignedByte();
-			flag7 = header.readUnsignedByte();
-			prgRamSize = header.readUnsignedByte();
+			_chrRam = chrRomSize == 0 ? true : false;
+			var flag6:uint = header.readUnsignedByte();
+			var flag7:uint = header.readUnsignedByte();
+			var prgRamSize:uint = header.readUnsignedByte();
 			prgRamSize = prgRamSize == 0 ? 8192 : prgRamSize;
-			flag9 = header.readUnsignedByte();
-			flag10 = header.readUnsignedByte();
+			var flag9:uint = header.readUnsignedByte();
+			var flag10:uint = header.readUnsignedByte();
 			
 			// Parse Flags
-			sram = (flag6 & 0x02) ? true : false;
-			trainer = (flag6 & 0x04) ? true : false;
-			mapper = (flag6 & 0xF0) >> 4;
-			mapper |= (flag7 & 0xF0);
+			_sram = (flag6 & 0x02) ? true : false;
+			_trainer = (flag6 & 0x04) ? true : false;
+			_mapper = (flag6 & 0xF0) >> 4;
+			_mapper |= (flag7 & 0xF0);
 			
-			if (sram) emulatorView.log("parseRom: SRAM in CPU $6000-$7FFF Present");
-			emulatorView.log("parseRom: Mapper Type: " + mapper.toString(16));
+			if (_sram)
+				_emulatorView.log("parseRom: SRAM in CPU $6000-$7FFF Present");
+				
+			_emulatorView.log("parseRom: Mapper Type: " + _mapper.toString(16));
 			
-			TVSystem = flag9 & 0x01;
-			if (TVSystem == Globals.NTSC) emulatorView.log("parseRom: TV System is NTSC");
-			else emulatorView.log("parseRom: TV System is PAL");
+			_TVSystem = flag9 & 0x01;
+			if (_TVSystem == Globals.NTSC)
+				_emulatorView.log("parseRom: TV System is NTSC");
+			else
+				_emulatorView.log("parseRom: TV System is PAL");
 			
-			nes2Header = flag7 & 0x04 ? true : false;
+			var nes2Header:Boolean = flag7 & 0x04 ? true : false;
 			if (nes2Header)
 			{
-				emulatorView.log("parseRom: NES2.0 File found, not able to parse at this time.");
-				validFile = false;
+				_emulatorView.log("parseRom: NES2.0 File found, not able to parse at this time.");
+				_validFile = false;
 				return;
 			}
 			
 			// Load Trainer
-			if (trainer)
+			if (_trainer)
 			{
 				if (romData.bytesAvailable < 512)
 				{
-					emulatorView.log("parseRom: Invalid file length - Trainer");
-					validFile = false;
+					_emulatorView.log("parseRom: Invalid file length - Trainer");
+					_validFile = false;
 					return;
 				}
-				trainerRom = new ByteArray();
-				romData.readBytes(trainerRom, 0, 512);
-				emulatorView.log("parseRom: 512-byte trainer at $7000-$71FF");
+				_trainerRom = new ByteArray();
+				romData.readBytes(_trainerRom, 0, 512);
+				_emulatorView.log("parseRom: 512-byte trainer at $7000-$71FF");
 			}
 			
 			// Read PRG Rom Data
-			prgRom = new ByteArray();
+			_prgRom = new ByteArray();
+			_prgRom.endian = Endian.LITTLE_ENDIAN;
 			
 			if (romData.bytesAvailable < prgRomSize)
 			{
-				emulatorView.log("parseRom: Invalid file lenth - PRG ROM");
-				validFile = false;
+				_emulatorView.log("parseRom: Invalid file lenth - PRG ROM");
+				_validFile = false;
 				return;
 			}
-			romData.readBytes(prgRom, prgRomSize);
-			emulatorView.log("parseRom: PRG ROM Size: " + prgRomSize);
+			romData.readBytes(_prgRom, 0, prgRomSize);
+			_emulatorView.log("parseRom: PRG ROM Size: " + prgRomSize);			
 			
-			chrRom = new ByteArray();
+			_chrRom = new ByteArray();
 			// Read CHR Rom Data
 			if (chrRomSize && chrRomSize <= romData.bytesAvailable)
 			{
-				romData.readBytes(chrRom, 0, chrRomSize);
-				emulatorView.log("parseRom: CHR ROM Size: " + chrRomSize);
+				romData.readBytes(_chrRom, 0, chrRomSize);
+				_emulatorView.log("parseRom: CHR ROM Size: " + chrRomSize);
 			}
 			
-			emulatorView.log("parseRom: PRG RAM Size: " + prgRamSize);
+			_emulatorView.log("parseRom: PRG RAM Size: " + prgRamSize);
 			if (romData.bytesAvailable == 0)
 			{
-				emulatorView.log("parseRom: Finished Parsing ROM");
+				_emulatorView.log("parseRom: Finished Parsing ROM");
+				_validFile = true;
 			}
 			else
 			{
-				emulatorView.log("parseRom: " + romData.bytesAvailable + " bytes unparsed");
+				_emulatorView.log("parseRom: " + romData.bytesAvailable + " bytes unparsed");
 			}
-			
 		}
 		
+		private function dumpByteArray(ba:ByteArray, startPos:uint,  len:uint):void
+		{
+			var position:uint = ba.position;
+			ba.position = startPos;
+			_emulatorView.log("00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F");
+			_emulatorView.log("===============================================");
+			var str:String;
+			while (ba.position < len)
+			{
+				str = "";
+				for (var j:int = 0; j < 16; j++)
+				{
+					var value:uint = ba.readUnsignedByte();
+					if (value < 16)
+						str += 0;
+					str += value.toString(16);
+					str += " ";
+				}
+				_emulatorView.log(str);				
+			}
+			
+			
+			ba.position = position;
+		}
+		
+		// Getters/Setters
+		public function get mapper():uint 
+		{
+			return _mapper;
+		}
+		
+		public function set mapper(value:uint):void 
+		{
+			_mapper = value;
+		}
+		
+		public function get trainerRom():ByteArray 
+		{
+			return _trainerRom;
+		}
+		
+		public function set trainerRom(value:ByteArray):void 
+		{
+			_trainerRom = value;
+		}
+		
+		public function get prgRom():ByteArray 
+		{
+			return _prgRom;
+		}
+		
+		public function set prgRom(value:ByteArray):void 
+		{
+			_prgRom = value;
+		}
+		
+		public function get chrRom():ByteArray 
+		{
+			return _chrRom;
+		}
+		
+		public function set chrRom(value:ByteArray):void 
+		{
+			_chrRom = value;
+		}
+		
+		public function get validFile():Boolean 
+		{
+			return _validFile;
+		}
+		
+		public function set validFile(value:Boolean):void 
+		{
+			_validFile = value;
+		}
+		
+		public function get loading():Boolean 
+		{
+			return _loading;
+		}
+		
+		public function set loading(value:Boolean):void 
+		{
+			_loading = value;
+		}
+	
 	}
 
 }

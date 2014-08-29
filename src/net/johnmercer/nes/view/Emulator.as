@@ -13,8 +13,9 @@ package net.johnmercer.nes.view
 	 */
 	public class Emulator extends Sprite
 	{
-		private var cpu:CPU;
-		private var rom:ROM;
+		private var _cpu:CPU;
+		private var _rom:ROM;
+		private var _mapper:Mapper;
 		
 		private var _fileName:String = "nestest.nes";
 		//private var _fileName:String = "Super Mario Bros.nes";
@@ -22,10 +23,10 @@ package net.johnmercer.nes.view
 		private var _fileLoader:URLLoader;
 		private var _romData:ByteArray;
 		
-		private var _loadingFile:Boolean = false;
-		
+		// UI
 		private var _titleTextField:TextField;
 		private var _infoTextField:TextField;
+		private var _button:SimpleButton;
 		
 		private var _width:Number;
 		private var _height:Number;
@@ -40,6 +41,7 @@ package net.johnmercer.nes.view
 			titleTextFormat.color = 0xFF0000;
 			titleTextFormat.size = 24;
 			titleTextFormat.bold = true;
+			titleTextFormat.font = "Arial";
 			
 			_titleTextField = new TextField();
 			_titleTextField.defaultTextFormat = titleTextFormat;
@@ -52,8 +54,10 @@ package net.johnmercer.nes.view
 			var infoTextFormat:TextFormat = new TextFormat();
 			infoTextFormat.color = 0xFFFFFF;
 			infoTextFormat.size = 12;
+			infoTextFormat.font = "Courier";
 			
 			_infoTextField = new TextField();
+			_infoTextField.embedFonts = false
 			_infoTextField.defaultTextFormat = infoTextFormat;
 			_infoTextField.wordWrap = true;
 			_infoTextField.text = "Welcome...";
@@ -62,21 +66,17 @@ package net.johnmercer.nes.view
 			_infoTextField.x = 0;
 			_infoTextField.y = _height / 2;
 			
+			
 			// Create system
-			rom = new ROM(this);
-			cpu = new CPU(this);
+			_rom = new ROM(this);
 			
-			
-			//addEventListener(Event.ENTER_FRAME, onEnterFrame);
 			
 			addChild(_titleTextField);
 			addChild(_infoTextField);
 			
 			// Load Rom
-			rom.loadFile(_fileName);
-			cpu.loadRom(rom);
-			cpu.start(0xC0000);
-			cpu.execute(1000);
+			_rom.loadFile(_fileName);		
+			addEventListener(Event.ENTER_FRAME, waitForRom);
 		}
 		
 		
@@ -86,6 +86,38 @@ package net.johnmercer.nes.view
 			_infoTextField.scrollV++;
 		}
 		
+		public function waitForRom(e:Event):void
+		{
+			// Check to see if we've finished loading
+			if (!_rom.loading)
+			{
+				removeEventListener(Event.ENTER_FRAME, waitForRom);
+				if (_rom.validFile)
+				{
+					startEmulation();
+				}
+				else
+				{
+					log("Failed to load ROM");
+				}
+			}
+		}
+		
+		
+		private function onMouseClick(e:Event):void
+		{
+			_cpu.execute();
+		}
+		
+		public function startEmulation():void
+		{
+			addEventListener(MouseEvent.CLICK, onMouseClick);
+			_mapper = new Mapper(this);
+			_mapper.loadRom(_rom);
+			_cpu = new CPU(this, _rom, _mapper);
+			_cpu.start(0xC000);
+			_cpu.run(20);
+		}
 	}
 
 }
