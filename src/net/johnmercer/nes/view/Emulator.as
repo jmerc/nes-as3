@@ -116,7 +116,7 @@ package net.johnmercer.nes.view
 			_mapper.loadRom(_rom);
 			_cpu = new CPU(this, _rom, _mapper);
 			_cpu.start(0xC000);
-			_cpu.run(20);
+			_cpu.run(112);
 		}
 	}
 

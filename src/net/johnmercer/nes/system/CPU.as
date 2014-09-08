@@ -208,21 +208,32 @@ package net.johnmercer.nes.system
 			
 			switch(addressingMode)
 			{
+				// Two bytes for a word
 				case ABS:
+				case ABX:
+				case ABY:
 				case IND:
 					paramWord = readUnsignedWord(PC);
 					PC += 2;
 					break;
+					
+				// One byte for a signed value
 				case IMM:
-					param1 = readByte(PC++);
-					break;
-				case ZPG:
-					param1 = readUnsignedByte(PC++);
-					break;
-				case IMP:
-					break;
 				case REL:
 					param1 = readByte(PC++);
+					break;
+					
+				// One byte for an unsigned value
+				case ZPG:
+				case ZPX:
+				case ZPX:
+				case INX:
+				case INY:
+					param1 = readUnsignedByte(PC++);
+					break;
+					
+				// No paramaters
+				case IMP:
 					break;
 				default:
 					_emulator.log("Unimplemented Addressing Mode: " + addressingMode);
@@ -539,24 +550,57 @@ package net.johnmercer.nes.system
 			switch (addressingMode)
 			{
 				case IMM:
-					value = int(param1);
+					value = param1;
+					break;
+				case ZPG:
+					value = _mem.readUnsignedByte(param1);
+					break;
+				case ZPX:
+					value = _mem.readUnsignedByte((param1 + X) & 0xFF);
+					break;
+				case ABS:
+					value = readUnsignedByte(paramWord);
+					break;
+				case ABX:
+					value = readUnsignedByte(paramWord + X);
+					break;
+				case ABY:
+					value = readUnsignedByte(paramWord + Y);
+					break;
+				case INX:
+					value = _mem((param1 + X) & 0xFF);
+					break;
+				case INY:
+					value = _mem((param1 + Y) & 0xFF);
 					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: ADC");
 					break;
 			}
 			result = A + value;
+			
+			
 		}
 
 		private function instrAND(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
 		{
 			switch (addressingMode)
 			{
+				case IMM:
+					A = A & param1 & 0xFF;
+					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: AND");
 					break;
 			}
 			
+			P &= 0x7D;  // Clear Negative and Zero Flag
+			
+			if (A == 0)
+				P |= ZERO_FLAG;
+				
+			if (A & 0x80)
+				P |= NEGATIVE_FLAG;			
 		}
 		
 		private function instrASL(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
@@ -751,7 +795,9 @@ package net.johnmercer.nes.system
 		{
 			switch (addressingMode)
 			{
-				
+				case IMP:
+					P &= ~DECIMAL_FLAG;
+					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: CLD");
 					break;
@@ -762,7 +808,9 @@ package net.johnmercer.nes.system
 		{
 			switch (addressingMode)
 			{
-				
+				case IMP:
+					P &= ~IRQ_FLAG;
+					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: CLI");
 					break;
@@ -773,7 +821,9 @@ package net.johnmercer.nes.system
 		{
 			switch (addressingMode)
 			{
-				
+				case IMP:
+					P &= ~OVERFLOW_FLAG;
+					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: CLV");
 					break;
@@ -782,35 +832,77 @@ package net.johnmercer.nes.system
 		
 		private function instrCMP(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
 		{
+			var value:uint;
 			switch (addressingMode)
 			{
-				
+				case IMM:
+					value = param1 & 0xFF;
+					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: CMP");
 					break;
 			}
+			
+			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
+			
+			if (A >= value)
+				P |= CARRY_FLAG;
+			
+			if (A == value)
+				P |= ZERO_FLAG;
+				
+			if ((A - value) & 0x80)
+				P |= NEGATIVE_FLAG;
 		}
 		
 		private function instrCPX(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
 		{
+			var value:uint;
 			switch (addressingMode)
 			{
-				
+				case IMM:
+					value = param1 & 0xFF;
+					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: CPX");
 					break;
 			}
+			
+			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
+			
+			if (X >= value)
+				P |= CARRY_FLAG;
+			
+			if (X == value)
+				P |= ZERO_FLAG;
+				
+			if ((X - value) & 0x80)
+				P |= NEGATIVE_FLAG;
 		}
 		
 		private function instrCPY(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
 		{
+			var value:uint;
 			switch (addressingMode)
 			{
-				
+				case IMM:
+					value = param1 & 0xFF;
+					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: CPY");
 					break;
 			}
+			
+			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
+			
+			if (Y >= value)
+				P |= CARRY_FLAG;
+			
+			if (Y == value)
+				P |= ZERO_FLAG;
+				
+			if ((Y - value) & 0x80)
+				P |= NEGATIVE_FLAG;
 		}
 		
 		private function instrDEC(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
@@ -1028,7 +1120,7 @@ package net.johnmercer.nes.system
 			switch (addressingMode)
 			{
 				case IMP:
-					pushStack(P);
+					pushStack(P | BREAK_FLAG);  // Break flag is always pushed with a 1
 					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: PHP");
@@ -1054,7 +1146,7 @@ package net.johnmercer.nes.system
 			switch (addressingMode)
 			{
 				case IMP:
-					P = popStack();
+					P = (popStack() & ~BREAK_FLAG) | UNUSED_FLAG;
 					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: PLP");

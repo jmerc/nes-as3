@@ -26,6 +26,7 @@ package net.johnmercer.nes.utils
 				str += "\n";				
 			}
 			ba.position = position;
+			trace(str);
 			return str;		
 		}
 	}
