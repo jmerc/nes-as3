@@ -208,7 +208,7 @@ package net.johnmercer.nes.system
 			
 			switch(addressingMode)
 			{
-				// Two bytes for a word
+				// Two bytes for an unsigned word
 				case ABS:
 				case ABX:
 				case ABY:
@@ -416,7 +416,9 @@ package net.johnmercer.nes.system
 				case "TYA":
 					instrTYA(addressingMode, param1, param2, paramWord);
 					break;
-					
+				case "XXX":
+					instrXXX(addressingMode, param1, param2, paramWord);
+					break;					
 				default:
 					_emulator.log("Unimplemented instruction" + instruction + ":" + (INST_NAME[instruction]?INST_NAME[instruction]:"Unknown"));
 					break;
@@ -437,6 +439,12 @@ package net.johnmercer.nes.system
 			_mem.position = 0x100 + SP;
 			SP = (SP + 1) & 0xFF;
 			return _mem.readUnsignedByte();
+		}
+		
+		private function writeByte(addr:uint, value:uint):void
+		{
+			_mem.position = addr;
+			_mem.writeByte(value);
 		}
 		
 		private function readByte(addr:uint):int
@@ -553,12 +561,12 @@ package net.johnmercer.nes.system
 					value = param1;
 					break;
 				case ZPG:
-					value = readUnsignedByte(param1);
+					_mem.position = param1;
+					value = _mem.readUnsignedByte();
 					break;
 				case ZPX:
-					value = readUnsignedByte(param1);
-					value += X;
-					value = readUnsignedByte(value & 0xFF);
+					_mem.position = (param1 + X) & 0xFF;
+					value = _mem.readUnsignedByte();
 					break;
 				case ABS:
 					value = readUnsignedByte(paramWord);
@@ -571,52 +579,109 @@ package net.johnmercer.nes.system
 					value = readUnsignedByte(paramWord + Y);
 					break;
 				case INX:
-					value = readUnsignedByte(param1);
-					value = (value + X) & 0xFF;	
-					if (value == 0xFF)
+					// Address to read value from is at (param1 + X) & 0xFF
+					value = (param1 + X) & 0xFF; // Pointer to address
+					if (value == 0xFF)  // Page boundary
 						value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 					else
-						value = readUnsignedWord(value);
+					{
+						_mem.position = value;
+						value = _mem.readUnsignedShort(); // address
+					}
 						
 					value = readUnsignedByte(value);
 					break;
 				case INY:
 					if (param1 == 0xFF)
-						value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
+						value = readUnsignedByte(value) | (readUnsignedByte(0) << 8);
 					else
-						value = readUnsignedWord(param1);
+					{
+						_mem.position = param1;
+						value = _mem.readUnsignedShort();
+					}
+						
 					value += Y;
 					value = readUnsignedByte(value);
-					break;					
+					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: ADC");
 					break;
 			}
+			
 			result = A + value;
+			
 			P &= ~(NEGATIVE_FLAG | CARRY_FLAG | OVERFLOW_FLAG);
+			
 			if (result & 0x80)
 				P |= NEGATIVE_FLAG;
 			if (result & 0x100)
 				P |= CARRY_FLAG;
+				
 			var sign:uint = 0;
 			// Overflow if A and Value have the same sign, but result is a different sign
+			// Could check wtih (A & V & ~R | ~A & ~V & R) & 0x80 .. is that faster?
 			if (((sign = A & 0x80) == (value & 0x80)) && (sign != (result & 0x80)))
 				P |= OVERFLOW_FLAG;
 			
-			A = result & 0xFF;
 		}
 		
 		private function instrAND(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
 		{
+			var value:uint = 0;
 			switch (addressingMode)
 			{
 				case IMM:
-					A = A & param1 & 0xFF;
+					value = param1;
+					break;
+				case ZPG:
+					_mem.position = param1;
+					value = _mem.readUnsignedByte();
+					break;
+				case ZPX:
+					_mem.position = (param1 + X) & 0xFF;
+					value = _mem.readUnsignedByte();
+					break;
+				case ABS:
+					value = readUnsignedByte(paramWord);
+					break;
+				case ABX:
+					value = readUnsignedByte(paramWord + X);
+					// Calculate cycle by checking paramWord + X & 0xFF < paramWord & 0xFF(or param1?)
+					break;
+				case ABY:
+					value = readUnsignedByte(paramWord + Y);
+					break;
+				case INX:
+					// Address to read value from is at (param1 + X) & 0xFF
+					value = (param1 + X) & 0xFF; // Pointer to address
+					if (value == 0xFF)  // Page boundary
+						value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
+					else
+					{
+						_mem.position = value;
+						value = _mem.readUnsignedShort(); // address
+					}
+						
+					value = readUnsignedByte(value);
+					break;
+				case INY:
+					if (param1 == 0xFF)
+						value = readUnsignedByte(value) | (readUnsignedByte(0) << 8);
+					else
+					{
+						_mem.position = param1;
+						value = _mem.readUnsignedShort();
+					}
+						
+					value += Y;
+					value = readUnsignedByte(value);
 					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: AND");
 					break;
 			}
+			
+			A = A & value & 0xFF;
 			
 			P &= 0x7D;  // Clear Negative and Zero Flag
 			
@@ -693,10 +758,11 @@ package net.johnmercer.nes.system
 			switch (addressingMode)
 			{
 				case ZPG:
-					value = _mem[param1];
+					_mem.position = param1;
+					value = _mem.readUnsignedByte();
 					break;
 				case ABS:
-					value = readByte(paramWord);
+					value = readUnsignedByte(paramWord);
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: BIT");
 					break;
@@ -718,7 +784,12 @@ package net.johnmercer.nes.system
 		{
 			switch (addressingMode)
 			{
-				
+				case REL:
+					if (P &  NEGATIVE_FLAG)
+					{
+						PC += param1;
+					}
+					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: BMI");
 					break;
@@ -1045,7 +1116,8 @@ package net.johnmercer.nes.system
 					A = param1 & 0xFF;
 					break;
 				case ZPG:
-					A = _mem[param1] & 0xFF;
+					_mem.position = param1;
+					A = _mem.readUnsignedByte();
 					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: LDA");
@@ -1108,6 +1180,7 @@ package net.johnmercer.nes.system
 			switch (addressingMode)
 			{
 				case IMP:
+					// No Op
 					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: NOP");
@@ -1280,7 +1353,8 @@ package net.johnmercer.nes.system
 			switch (addressingMode)
 			{
 				case ZPG:
-					_mem[param1] = A;
+					_mem.position = param1;
+					_mem.writeByte(A);
 					break;
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: STA");
@@ -1293,7 +1367,6 @@ package net.johnmercer.nes.system
 			switch (addressingMode)
 			{
 				case ZPG:
-					_mem.position = param1;
 					_mem.writeByte(X);
 					break;
 				default:
@@ -1379,6 +1452,11 @@ package net.johnmercer.nes.system
 			}
 		}
 		
+		private function instrXXX(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
+		{
+			_emulator.log("Invalid Opcode read, ignoring");
+		}
+		
 		
 		
 		
@@ -1425,7 +1503,8 @@ package net.johnmercer.nes.system
 					break;
 				case ZPG:
 					str += "ZPG $" + hexToStr(p1) + " = ";
-					str += hexToStr(_mem[p1]);
+					_mem.position = p1;
+					str += hexToStr(_mem.readUnsignedByte());
 					break;
 				case IMP:
 					break;
