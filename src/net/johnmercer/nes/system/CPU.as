@@ -545,43 +545,67 @@ package net.johnmercer.nes.system
 		
 		private function instrADC(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
 		{
-			var value:int = 0;
-			var result:int = 0;
+			var value:uint = 0;
+			var result:uint = 0;
 			switch (addressingMode)
 			{
 				case IMM:
 					value = param1;
 					break;
 				case ZPG:
-					value = _mem.readUnsignedByte(param1);
+					value = readUnsignedByte(param1);
 					break;
 				case ZPX:
-					value = _mem.readUnsignedByte((param1 + X) & 0xFF);
+					value = readUnsignedByte(param1);
+					value += X;
+					value = readUnsignedByte(value & 0xFF);
 					break;
 				case ABS:
 					value = readUnsignedByte(paramWord);
 					break;
 				case ABX:
 					value = readUnsignedByte(paramWord + X);
+					// Calculate cycle by checking paramWord + X & 0xFF < paramWord & 0xFF(or param1?)
 					break;
 				case ABY:
 					value = readUnsignedByte(paramWord + Y);
 					break;
 				case INX:
-					value = _mem((param1 + X) & 0xFF);
+					value = readUnsignedByte(param1);
+					value = (value + X) & 0xFF;	
+					if (value == 0xFF)
+						value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
+					else
+						value = readUnsignedWord(value);
+						
+					value = readUnsignedByte(value);
 					break;
 				case INY:
-					value = _mem((param1 + Y) & 0xFF);
-					break;
+					if (param1 == 0xFF)
+						value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
+					else
+						value = readUnsignedWord(param1);
+					value += Y;
+					value = readUnsignedByte(value);
+					break;					
 				default:
 					_emulator.log("Invalid addressing mode " + ADDR_NAME[addressingMode] + " for Instruction: ADC");
 					break;
 			}
 			result = A + value;
+			P &= ~(NEGATIVE_FLAG | CARRY_FLAG | OVERFLOW_FLAG);
+			if (result & 0x80)
+				P |= NEGATIVE_FLAG;
+			if (result & 0x100)
+				P |= CARRY_FLAG;
+			var sign:uint = 0;
+			// Overflow if A and Value have the same sign, but result is a different sign
+			if (((sign = A & 0x80) == (value & 0x80)) && (sign != (result & 0x80)))
+				P |= OVERFLOW_FLAG;
 			
-			
+			A = result & 0xFF;
 		}
-
+		
 		private function instrAND(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void
 		{
 			switch (addressingMode)
