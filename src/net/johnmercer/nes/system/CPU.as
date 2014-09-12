@@ -609,20 +609,27 @@ package net.johnmercer.nes.system
 			}
 			
 			result = A + value;
+			if (P & CARRY_FLAG)
+				result++;
 			
-			P &= ~(NEGATIVE_FLAG | CARRY_FLAG | OVERFLOW_FLAG);
+			P &= ~(NEGATIVE_FLAG | CARRY_FLAG | OVERFLOW_FLAG | ZERO_FLAG);
 			
 			if (result & 0x80)
 				P |= NEGATIVE_FLAG;
 			if (result & 0x100)
 				P |= CARRY_FLAG;
-				
+
 			var sign:uint = 0;
 			// Overflow if A and Value have the same sign, but result is a different sign
 			// Could check wtih (A & V & ~R | ~A & ~V & R) & 0x80 .. is that faster?
 			if (((sign = A & 0x80) == (value & 0x80)) && (sign != (result & 0x80)))
 				P |= OVERFLOW_FLAG;
 			
+			result &= 0xFF;	
+			if (result == 0)
+				P |= ZERO_FLAG;
+				
+			A = result;
 		}
 		
 		private function instrAND(addressingMode:uint, param1:uint, param2:uint, paramWord:uint):void

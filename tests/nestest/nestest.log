@@ -194,40 +194,40 @@
 *C8E8  18        CLC                             A:E8 X:00 Y:00 P:2F SP:FB CYC: 61 SL:245
 *C8E9  24 01     BIT $01 = FF                    A:E8 X:00 Y:00 P:2E SP:FB CYC: 67 SL:245
 *C8EB  A9 5F     LDA #$5F                        A:E8 X:00 Y:00 P:EC SP:FB CYC: 76 SL:245
-C8ED  49 AA     EOR #$AA                        A:5F X:00 Y:00 P:6C SP:FB CYC: 82 SL:245
-C8EF  B0 0B     BCS $C8FC                       A:F5 X:00 Y:00 P:EC SP:FB CYC: 88 SL:245
-C8F1  10 09     BPL $C8FC                       A:F5 X:00 Y:00 P:EC SP:FB CYC: 94 SL:245
-C8F3  C9 F5     CMP #$F5                        A:F5 X:00 Y:00 P:EC SP:FB CYC:100 SL:245
-C8F5  D0 05     BNE $C8FC                       A:F5 X:00 Y:00 P:6F SP:FB CYC:106 SL:245
-C8F7  50 03     BVC $C8FC                       A:F5 X:00 Y:00 P:6F SP:FB CYC:112 SL:245
-C8F9  4C 00 C9  JMP $C900                       A:F5 X:00 Y:00 P:6F SP:FB CYC:118 SL:245
-C900  EA        NOP                             A:F5 X:00 Y:00 P:6F SP:FB CYC:127 SL:245
-C901  38        SEC                             A:F5 X:00 Y:00 P:6F SP:FB CYC:133 SL:245
-C902  B8        CLV                             A:F5 X:00 Y:00 P:6F SP:FB CYC:139 SL:245
-C903  A9 70     LDA #$70                        A:F5 X:00 Y:00 P:2F SP:FB CYC:145 SL:245
-C905  49 70     EOR #$70                        A:70 X:00 Y:00 P:2D SP:FB CYC:151 SL:245
-C907  D0 09     BNE $C912                       A:00 X:00 Y:00 P:2F SP:FB CYC:157 SL:245
-C909  70 07     BVS $C912                       A:00 X:00 Y:00 P:2F SP:FB CYC:163 SL:245
-C90B  90 05     BCC $C912                       A:00 X:00 Y:00 P:2F SP:FB CYC:169 SL:245
-C90D  30 03     BMI $C912                       A:00 X:00 Y:00 P:2F SP:FB CYC:175 SL:245
-C90F  4C 16 C9  JMP $C916                       A:00 X:00 Y:00 P:2F SP:FB CYC:181 SL:245
-C916  EA        NOP                             A:00 X:00 Y:00 P:2F SP:FB CYC:190 SL:245
-C917  18        CLC                             A:00 X:00 Y:00 P:2F SP:FB CYC:196 SL:245
-C918  24 01     BIT $01 = FF                    A:00 X:00 Y:00 P:2E SP:FB CYC:202 SL:245
-C91A  A9 00     LDA #$00                        A:00 X:00 Y:00 P:EE SP:FB CYC:211 SL:245
-C91C  69 69     ADC #$69                        A:00 X:00 Y:00 P:6E SP:FB CYC:217 SL:245
-C91E  30 0B     BMI $C92B                       A:69 X:00 Y:00 P:2C SP:FB CYC:223 SL:245
-C920  B0 09     BCS $C92B                       A:69 X:00 Y:00 P:2C SP:FB CYC:229 SL:245
-C922  C9 69     CMP #$69                        A:69 X:00 Y:00 P:2C SP:FB CYC:235 SL:245
-C924  D0 05     BNE $C92B                       A:69 X:00 Y:00 P:2F SP:FB CYC:241 SL:245
-C926  70 03     BVS $C92B                       A:69 X:00 Y:00 P:2F SP:FB CYC:247 SL:245
-C928  4C 2F C9  JMP $C92F                       A:69 X:00 Y:00 P:2F SP:FB CYC:253 SL:245
-C92F  EA        NOP                             A:69 X:00 Y:00 P:2F SP:FB CYC:262 SL:245
-C930  38        SEC                             A:69 X:00 Y:00 P:2F SP:FB CYC:268 SL:245
-C931  F8        SED                             A:69 X:00 Y:00 P:2F SP:FB CYC:274 SL:245
-C932  24 01     BIT $01 = FF                    A:69 X:00 Y:00 P:2F SP:FB CYC:280 SL:245
-C934  A9 01     LDA #$01                        A:69 X:00 Y:00 P:ED SP:FB CYC:289 SL:245
-C936  69 69     ADC #$69                        A:01 X:00 Y:00 P:6D SP:FB CYC:295 SL:245
+*C8ED  49 AA     EOR #$AA                        A:5F X:00 Y:00 P:6C SP:FB CYC: 82 SL:245
+*C8EF  B0 0B     BCS $C8FC                       A:F5 X:00 Y:00 P:EC SP:FB CYC: 88 SL:245
+*C8F1  10 09     BPL $C8FC                       A:F5 X:00 Y:00 P:EC SP:FB CYC: 94 SL:245
+*C8F3  C9 F5     CMP #$F5                        A:F5 X:00 Y:00 P:EC SP:FB CYC:100 SL:245
+*C8F5  D0 05     BNE $C8FC                       A:F5 X:00 Y:00 P:6F SP:FB CYC:106 SL:245
+*C8F7  50 03     BVC $C8FC                       A:F5 X:00 Y:00 P:6F SP:FB CYC:112 SL:245
+*C8F9  4C 00 C9  JMP $C900                       A:F5 X:00 Y:00 P:6F SP:FB CYC:118 SL:245
+*C900  EA        NOP                             A:F5 X:00 Y:00 P:6F SP:FB CYC:127 SL:245
+*C901  38        SEC                             A:F5 X:00 Y:00 P:6F SP:FB CYC:133 SL:245
+*C902  B8        CLV                             A:F5 X:00 Y:00 P:6F SP:FB CYC:139 SL:245
+*C903  A9 70     LDA #$70                        A:F5 X:00 Y:00 P:2F SP:FB CYC:145 SL:245
+*C905  49 70     EOR #$70                        A:70 X:00 Y:00 P:2D SP:FB CYC:151 SL:245
+*C907  D0 09     BNE $C912                       A:00 X:00 Y:00 P:2F SP:FB CYC:157 SL:245
+*C909  70 07     BVS $C912                       A:00 X:00 Y:00 P:2F SP:FB CYC:163 SL:245
+*C90B  90 05     BCC $C912                       A:00 X:00 Y:00 P:2F SP:FB CYC:169 SL:245
+*C90D  30 03     BMI $C912                       A:00 X:00 Y:00 P:2F SP:FB CYC:175 SL:245
+*C90F  4C 16 C9  JMP $C916                       A:00 X:00 Y:00 P:2F SP:FB CYC:181 SL:245
+*C916  EA        NOP                             A:00 X:00 Y:00 P:2F SP:FB CYC:190 SL:245
+*C917  18        CLC                             A:00 X:00 Y:00 P:2F SP:FB CYC:196 SL:245
+*C918  24 01     BIT $01 = FF                    A:00 X:00 Y:00 P:2E SP:FB CYC:202 SL:245
+*C91A  A9 00     LDA #$00                        A:00 X:00 Y:00 P:EE SP:FB CYC:211 SL:245
+*C91C  69 69     ADC #$69                        A:00 X:00 Y:00 P:6E SP:FB CYC:217 SL:245
+*C91E  30 0B     BMI $C92B                       A:69 X:00 Y:00 P:2C SP:FB CYC:223 SL:245
+*C920  B0 09     BCS $C92B                       A:69 X:00 Y:00 P:2C SP:FB CYC:229 SL:245
+*C922  C9 69     CMP #$69                        A:69 X:00 Y:00 P:2C SP:FB CYC:235 SL:245
+*C924  D0 05     BNE $C92B                       A:69 X:00 Y:00 P:2F SP:FB CYC:241 SL:245
+*C926  70 03     BVS $C92B                       A:69 X:00 Y:00 P:2F SP:FB CYC:247 SL:245
+*C928  4C 2F C9  JMP $C92F                       A:69 X:00 Y:00 P:2F SP:FB CYC:253 SL:245
+*C92F  EA        NOP                             A:69 X:00 Y:00 P:2F SP:FB CYC:262 SL:245
+*C930  38        SEC                             A:69 X:00 Y:00 P:2F SP:FB CYC:268 SL:245
+*C931  F8        SED                             A:69 X:00 Y:00 P:2F SP:FB CYC:274 SL:245
+*C932  24 01     BIT $01 = FF                    A:69 X:00 Y:00 P:2F SP:FB CYC:280 SL:245
+*C934  A9 01     LDA #$01                        A:69 X:00 Y:00 P:ED SP:FB CYC:289 SL:245
+*C936  69 69     ADC #$69                        A:01 X:00 Y:00 P:6D SP:FB CYC:295 SL:245
 C938  30 0B     BMI $C945                       A:6B X:00 Y:00 P:2C SP:FB CYC:301 SL:245
 C93A  B0 09     BCS $C945                       A:6B X:00 Y:00 P:2C SP:FB CYC:307 SL:245
 C93C  C9 6B     CMP #$6B                        A:6B X:00 Y:00 P:2C SP:FB CYC:313 SL:245
