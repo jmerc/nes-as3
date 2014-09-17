@@ -5,7 +5,7 @@ package net.johnmercer.nes.system
 	import flash.utils.*;
 	import net.johnmercer.nes.enums.*;
 	import net.johnmercer.nes.system.*;
-	import net.johnmercer.nes.view.*;
+	import net.johnmercer.nes.views.*;
 	
 	/**
 	 * ...

@@ -3,7 +3,7 @@ package net.johnmercer.nes.system
 	import flash.utils.ByteArray;
 	import flash.utils.Endian;
 	import net.johnmercer.nes.utils.Debug;
-	import net.johnmercer.nes.view.Emulator;
+	import net.johnmercer.nes.views.Emulator;
 	/**
 	 * ...
 	 * @author John Owen Mercer

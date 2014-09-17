@@ -1,11 +1,14 @@
-package net.johnmercer.nes.view 
+package net.johnmercer.nes.views 
 {
 	import flash.display.*;
 	import flash.events.*;
 	import flash.net.*;
 	import flash.text.*;
 	import flash.utils.*;
+	import net.johnmercer.nes.enums.Globals;
 	import net.johnmercer.nes.system.*;
+	import net.johnmercer.nes.tests.Nestest;
+	import net.johnmercer.nes.tests.Nestest;
 	
 	/**
 	 * ...
@@ -17,8 +20,8 @@ package net.johnmercer.nes.view
 		private var _rom:ROM;
 		private var _mapper:Mapper;
 		
-		private var _fileName:String = "nestest.nes";
-		//private var _fileName:String = "Super Mario Bros.nes";
+		private var _testFile:String = "nestest.nes";
+		private var _romFile:String = "Super Mario Bros.nes";
 		private var _fileRequest:URLRequest;
 		private var _fileLoader:URLLoader;
 		private var _romData:ByteArray;
@@ -45,7 +48,8 @@ package net.johnmercer.nes.view
 			
 			_titleTextField = new TextField();
 			_titleTextField.defaultTextFormat = titleTextFormat;
-			_titleTextField.text = "Nintendo Entertainment System";
+			//_titleTextField.text = "Nintendo Entertainment System";
+			_titleTextField.text = "Console";
 			_titleTextField.width = _titleTextField.textWidth + 4;
 			_titleTextField.height = _titleTextField.textHeight + 4;
 			_titleTextField.x = (_width - _titleTextField.width) / 2;
@@ -74,8 +78,8 @@ package net.johnmercer.nes.view
 			addChild(_titleTextField);
 			addChild(_infoTextField);
 			
-			// Load Rom
-			_rom.loadFile(_fileName);		
+			_rom.loadFile(_testFile);
+			
 			addEventListener(Event.ENTER_FRAME, waitForRom);
 		}
 		
@@ -111,13 +115,18 @@ package net.johnmercer.nes.view
 		
 		public function startEmulation():void
 		{
-			addEventListener(MouseEvent.CLICK, onMouseClick);
+			//addEventListener(MouseEvent.CLICK, onMouseClick);
 			_mapper = new Mapper(this);
 			_mapper.loadRom(_rom);
 			_cpu = new CPU(this, _rom, _mapper);
-			_cpu.start(0xC000);
-			_cpu.run(230);
+			var test:Nestest = new Nestest(this);
+			
+			if (test.runTest(_cpu, 0xC000) == true)
+			{
+				log("NES Test Passed!");
+			}
 		}
+		
 	}
 
 }

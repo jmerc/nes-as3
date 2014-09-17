@@ -3,7 +3,7 @@ package net.johnmercer.nes
 	import flash.display.Sprite;
 	import flash.events.Event;
 	import flash.text.Font;
-	import net.johnmercer.nes.view.Emulator;
+	import net.johnmercer.nes.views.Emulator;
 	
 	/**
 	 * ...
@@ -29,19 +29,15 @@ package net.johnmercer.nes
 			_width = stage.stageWidth;
 			_height = stage.stageHeight;
 			
-			
 			// Draw stage background
 			graphics.beginFill(0x000000);
-			width
+			
 			graphics.drawRect(0, 0, _width, _height);
 			graphics.endFill();
 			
-			
 			removeEventListener(Event.ADDED_TO_STAGE, init);
 			
-			
 			var _emulator:Emulator = new Emulator(_width, _height);
-			
 			
 			this.addChild(_emulator);
 		}
