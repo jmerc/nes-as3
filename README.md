@@ -8,15 +8,7 @@ Progress:
 
 ROM file parser - complete for iNES 1.0
 Mappers Implemented: #0
+Instruction set: All Official Opcodes, all Unofficial Opcodes tested in nestest
 
 CPU
-Work needed: Optimization, cycle counting, interrupts, system registers
-
-Instructions Implemented:
-$20  JSR  ABS
-$38  SEC IMP
-$4C	JMP ABS
-$6C  JMP IND
-$86  STX ZPG
-$A2  LDX IMM
-$EA  NOP IMP
+Work needed: cycle counting, interrupts, system registers, further optimizations (?)
