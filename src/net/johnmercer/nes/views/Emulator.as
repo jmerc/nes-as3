@@ -84,10 +84,17 @@ package net.johnmercer.nes.views
 		}
 		
 		
-		public function log(text:String):void
+		public function log(text:String, append:Boolean = true):void
 		{
-			_infoTextField.appendText("\n" + text);
-			_infoTextField.scrollV++;
+			if (append == true)
+			{
+				_infoTextField.appendText("\n" + text);
+			}
+			else
+			{
+				_infoTextField.text = text;
+			}
+			_infoTextField.scrollV = _infoTextField.maxScrollV;
 		}
 		
 		public function waitForRom(e:Event):void
@@ -115,21 +122,17 @@ package net.johnmercer.nes.views
 		
 		public function startEmulation():void
 		{
-			addEventListener(MouseEvent.CLICK, onMouseClick);
+			//addEventListener(MouseEvent.CLICK, onMouseClick);
 			_mapper = new Mapper(this);
 			_mapper.loadRom(_rom);
 			_cpu = new CPU(this, _rom, _mapper);
-			/*
-			var test:Nestest = new Nestest(this);
 			
-			if (test.runTest(_cpu, 0xC000) == true)
-			{
-				log("NES Test Passed!");
-			}
-			*/
-			_cpu.start(0xC0000);
+			_cpu.start(0xC000);
 			_cpu.run(8991);
 			
+			//var test:Nestest = new Nestest(this);
+			
+			//test.startTest(_cpu, 0xC000);
 		}
 		
 	}

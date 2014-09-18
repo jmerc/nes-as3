@@ -1,5 +1,6 @@
 package net.johnmercer.nes.tests 
 {
+	import flash.events.Event;
 	import flash.utils.ByteArray;
 	import flash.utils.Dictionary;
 	import flash.utils.getTimer;
@@ -18,7 +19,12 @@ package net.johnmercer.nes.tests
 		private var _logArray:Vector.<CPUState>;
 		private var _emulator:Emulator;
 		private var _testLines:uint = 0;
-		
+		private var _newFrame:Boolean = false;
+		private var _cpu:CPU;
+		private var _currentLine:uint = 0;
+		private var _logState:CPUState;
+		private var _cpuState:CPUState;
+		private var _debugStr:String = "";
 		
 		public function Nestest(emulator:Emulator) 
 		{
@@ -27,41 +33,43 @@ package net.johnmercer.nes.tests
 			parseLog(_testLog);
 		}
 		
-		public function runTest(cpu:CPU, startAddr:uint):Boolean
+		private function onEnterFrame(e:Event):void
 		{
-			var currentLine:uint = 0;
-			var logState:CPUState;
-			var cpuState:CPUState;
+			_emulator.log(_debugStr, false);
+			runTest(15);
+		}
+		
+		private function runTest(time:uint):void
+		{
+			var endTime:uint = getTimer() + time;
 			var linePassed:Boolean;
-			
-			cpu.start(startAddr);
-			// Step through CPU code until we reach the end of the log
-			while (currentLine < _testLines)
+			while (_currentLine < _testLines && getTimer() < endTime)
 			{
-				if (currentLine == 6040)
-				{
-					//_emulator.log("Breakpoint for special line");
-				}
 				linePassed = true;
-				cpu.execute();
-				if (cpu.state.error == true)
+				_cpu.execute();
+				_cpuState = _cpu.state;
+				
+				_debugStr += "\n" + _cpuState.toString();
+				
+				if (_cpu.state.error == true)
 				{
-					_emulator.log("CPU Error at line: " + currentLine);
-					return false;
+					stopTest("CPU Error at line: " + _currentLine);
+					return;
 				}
 				// Compare state with log file
-				cpuState = cpu.state;
-				logState = _logArray[currentLine];
+				_logState = _logArray[_currentLine];
 				
-				if (cpuState.address != logState.address ||
-				    cpuState.opcode != logState.opcode ||
-					cpuState.param1 != logState.param1 ||
-					cpuState.param2 != logState.param2 ||
-					cpuState.A != logState.A ||
-					cpuState.X != logState.X ||
-					cpuState.Y != logState.Y ||
-					cpuState.P != logState.P ||
-					cpuState.SP != logState.SP /* ||
+				// Output debug string
+				
+				if (_cpuState.address != _logState.address ||
+				    _cpuState.opcode != _logState.opcode ||
+					_cpuState.param1 != _logState.param1 ||
+					_cpuState.param2 != _logState.param2 ||
+					_cpuState.A != _logState.A ||
+					_cpuState.X != _logState.X ||
+					_cpuState.Y != _logState.Y ||
+					_cpuState.P != _logState.P ||
+					_cpuState.SP != _logState.SP /* ||
 					cpuState.CYC != logState.CYC ||
 					cpuState.SL != logState.SL */ )
 				{
@@ -70,14 +78,35 @@ package net.johnmercer.nes.tests
 				
 				if (linePassed == false)
 				{
-					_emulator.log("Difference detected in CPU State at line " + currentLine + ":");
-					_emulator.log("CPU: " + cpuState.toString());
-					_emulator.log("LOG: " + logState.toString());
-					return false;
+					stopTest("Difference detected in CPU State at line " + _currentLine + ":\n" +
+					         "CPU: " + _cpuState.toString() + "\n" +
+					         "LOG: " + _logState.toString());
+					return;
 				}
-				currentLine++;
+				_currentLine++;
 			}
-			return true;
+			if (_currentLine >= _testLines)
+			{
+				stopTest("Nestest Passed!");
+			}
+		}
+		
+		public function startTest(cpu:CPU, startAddr:uint):void
+		{
+			_cpu = cpu;
+			_currentLine = 0;
+			_debugStr = "";
+			
+			_cpu.start(startAddr);
+			
+			_emulator.addEventListener(Event.ENTER_FRAME, onEnterFrame);
+		}
+		
+		public function stopTest(message:String):void
+		{
+			_emulator.removeEventListener(Event.ENTER_FRAME, onEnterFrame);
+			_emulator.log(_debugStr, true);
+			_emulator.log("\n" + message, true);
 		}
 		
 		private function parseLog(logArray:ByteArray):void
@@ -120,12 +149,6 @@ package net.johnmercer.nes.tests
 				}
 				state.SL = parseInt(SL, 10);
 				_testLines = _logArray.push(state);
-				
-				// Output each line read as parsed
-				/*
-				
-				_emulator.log(outStr);
-				*/
 			}
 			_emulator.log("Parsed nestest log, " + _testLines + " lines in " + (getTimer() - startTime) + "ms.");
 		}
