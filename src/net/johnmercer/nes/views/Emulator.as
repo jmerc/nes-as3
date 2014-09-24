@@ -7,8 +7,10 @@ package net.johnmercer.nes.views
 	import flash.utils.*;
 	import net.johnmercer.nes.enums.Globals;
 	import net.johnmercer.nes.system.*;
-	import net.johnmercer.nes.tests.Nestest;
-	import net.johnmercer.nes.tests.Nestest;
+	import net.johnmercer.nes.tests.instrtestv4.InstrTestV4;
+	import net.johnmercer.nes.tests.interfaces.ITest;
+	import net.johnmercer.nes.tests.nestest.Nestest;
+	import net.johnmercer.nes.tests.nestest.Nestest;
 	
 	/**
 	 * ...
@@ -16,15 +18,11 @@ package net.johnmercer.nes.views
 	 */
 	public class Emulator extends Sprite
 	{
+		private const INFO_LENGTH:int = 50;
+		
 		private var _cpu:CPU;
 		private var _rom:ROM;
 		private var _mapper:Mapper;
-		
-		private var _testFile:String = "nestest.nes";
-		private var _romFile:String = "Super Mario Bros.nes";
-		private var _fileRequest:URLRequest;
-		private var _fileLoader:URLLoader;
-		private var _romData:ByteArray;
 		
 		// UI
 		private var _titleTextField:TextField;
@@ -33,6 +31,9 @@ package net.johnmercer.nes.views
 		
 		private var _width:Number;
 		private var _height:Number;
+		
+		private var _infoTextArray:Vector.<String>;
+		private var _updateText:Boolean = false;
 		
 		
 		public function Emulator(width:Number, height:Number) 
@@ -70,31 +71,46 @@ package net.johnmercer.nes.views
 			_infoTextField.x = 0;
 			_infoTextField.y = _height / 2;
 			
+			_infoTextArray = new Vector.<String>();
+			_updateText = false;
 			
 			// Create system
 			_rom = new ROM(this);
-			
-			
+			_mapper = new Mapper(this);
+			_cpu = new CPU(this, _rom, _mapper);
+
 			addChild(_titleTextField);
 			addChild(_infoTextField);
 			
-			_rom.loadFile(_testFile);
+			addEventListener(Event.ENTER_FRAME, onEnterFrame);
 			
-			addEventListener(Event.ENTER_FRAME, waitForRom);
+			startEmulation();
 		}
 		
-		
-		public function log(text:String, append:Boolean = true):void
+		private function onEnterFrame(e:Event):void
 		{
-			if (append == true)
+			if (_updateText)
 			{
-				_infoTextField.appendText("\n" + text);
-			}
-			else
-			{
+				_updateText = false;
+				// Build string
+				var text:String = "";
+				for each (var line:String in _infoTextArray)
+				{
+					text += "\n" + line;
+				}
 				_infoTextField.text = text;
+				_infoTextField.scrollV = _infoTextField.maxScrollV;
 			}
-			_infoTextField.scrollV = _infoTextField.maxScrollV;
+		}
+
+		
+		public function log(text:String):void
+		{
+			if (_infoTextArray.push(text) > INFO_LENGTH)
+			{
+				_infoTextArray.shift();
+			}
+			_updateText = true;
 		}
 		
 		public function waitForRom(e:Event):void
@@ -114,6 +130,10 @@ package net.johnmercer.nes.views
 			}
 		}
 		
+		public function enableMouseStep():void
+		{
+			addEventListener(MouseEvent.CLICK, onMouseClick);
+		}
 		
 		private function onMouseClick(e:Event):void
 		{
@@ -122,18 +142,20 @@ package net.johnmercer.nes.views
 		
 		public function startEmulation():void
 		{
-			//addEventListener(MouseEvent.CLICK, onMouseClick);
-			_mapper = new Mapper(this);
-			_mapper.loadRom(_rom);
-			_cpu = new CPU(this, _rom, _mapper);
-			
-			_cpu.start(0xC000);
-			_cpu.run(8991);
-			
-			//var test:Nestest = new Nestest(this);
-			
-			//test.startTest(_cpu, 0xC000);
+			var test:ITest;
+			switch(Globals.MODE)
+			{
+				case Globals.NESTEST:
+					test = new Nestest(this);
+					test.startTest(_cpu, _rom, _mapper);
+					break;
+				case Globals.INSTRTESTV4:
+					test = new InstrTestV4(this);
+					test.startTest(_cpu, _rom, _mapper);
+					break;
+			}
 		}
+		
 		
 	}
 

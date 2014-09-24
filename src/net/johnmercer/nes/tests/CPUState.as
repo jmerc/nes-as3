@@ -17,7 +17,7 @@ package net.johnmercer.nes.tests
 		public var P:uint;
 		public var SP:uint;
 		public var CYC:uint;
-		public var SL:uint;
+		public var SL:int;
 		public var error:Boolean = false;
 		
 		public function toString():String

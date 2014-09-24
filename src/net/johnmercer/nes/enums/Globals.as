@@ -6,7 +6,11 @@ package net.johnmercer.nes.enums
 	 */
 	public class Globals 
 	{
-		public static const NESTEST:Boolean = true;
+		public static const MODE:String = NESTEST;
+		
+		public static const NESTEST:String = "nestest";
+		public static const INSTRTESTV4:String = "instrtestv4";
+		public static const NORMAL:String = "normal";
 		
 		public static const NTSC:uint = 0x00;
 		public static const PAL:uint = 0x01;

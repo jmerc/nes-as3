@@ -4,7 +4,6 @@ package net.johnmercer.nes.system
 	import flash.net.*;
 	import flash.utils.*;
 	import net.johnmercer.nes.enums.*;
-	import net.johnmercer.nes.system.*;
 	import net.johnmercer.nes.views.*;
 	
 	/**
@@ -75,6 +74,11 @@ package net.johnmercer.nes.system
 			
 			_loading = false;
 			_emulatorView.log("FileLoadError: " + e.type);
+		}
+		
+		public function loadByteArray(romData:ByteArray):void
+		{
+			parseRom(romData);
 		}
 		
 		private function parseRom(romData:ByteArray):void
