@@ -1,19 +1,21 @@
-package net.johnmercer.nes.system 
+package net.johnmercer.nes.system
 {
 	import flash.events.Event;
 	import flash.utils.ByteArray;
 	import flash.utils.Endian;
 	import flash.utils.getTimer;
+	import net.johnmercer.nes.enums.Globals;
 	import net.johnmercer.nes.tests.CPUState;
 	import net.johnmercer.nes.utils.Debug;
 	import net.johnmercer.nes.utils.StringUtils;
 	import net.johnmercer.nes.views.Emulator;
+	
 	/**
 	 * ...
 	 * @author John Owen Mercer
 	 */
-	public class CPU 
-	{	
+	public class CPU
+	{
 		// Processor Status Flags
 		private static const CARRY_FLAG:uint    = 0x01;
 		private static const ZERO_FLAG:uint     = 0x02;
@@ -118,7 +120,6 @@ package net.johnmercer.nes.system
 		"IMP", "IMM", "ZPG", "ZPX", "ZPY", "ABS", "ABX", "ABY", "IND", "INX", "INY", "REL", "ACM"
 		];
 		
-		
 		// Addressing mode of instruction
 		private static var INST_ADDR_MODE:Array = [
 		/*         0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F */
@@ -136,7 +137,6 @@ package net.johnmercer.nes.system
 		/*0xB0*/ REL, INY, IMP, INY, ZPX, ZPX, ZPY, ZPY, IMP, ABY, IMP, ABY, ABX, ABX, ABY, ABY,
 		/*0xC0*/ IMM, INX, IMM, INX, ZPG, ZPG, ZPG, ZPG, IMP, IMM, IMP, IMM, ABS, ABS, ABS, ABS,
 		/*0xD0*/ REL, INY, IMP, INY, ZPX, ZPX, ZPX, ZPX, IMP, ABY, IMP, ABY, ABX, ABX, ABX, ABX,
-		
 		/*0xE0*/ IMM, INX, IMM, INX, ZPG, ZPG, ZPG, ZPG, IMP, IMM, IMP, IMM, ABS, ABS, ABS, ABS,
 		/*0xF0*/ REL, INY, IMP, INY, ZPX, ZPX, ZPX, ZPX, IMP, ABY, IMP, ABY, ABX, ABX, ABX, ABX,
 		];
@@ -158,7 +158,6 @@ package net.johnmercer.nes.system
 		
 		private var _currentState:CPUState;
 		
-		
 		// Memory
 		// $0000-$07FF - Internal Ram
 		// $0800-$17FF - Mirror of Internal Ram
@@ -175,7 +174,6 @@ package net.johnmercer.nes.system
 		
 		// View
 		private var _emulator:Emulator;
-		private var _debugStr:String = "";
 		
 		// External Components
 		private var _rom:ROM;
@@ -185,8 +183,7 @@ package net.johnmercer.nes.system
 		private var _cycleCount:uint = 0;
 		private var _scanLine:int = 0;
 		
-		
-		public function CPU(emulator:Emulator, rom:ROM, mapper:Mapper) 
+		public function CPU(emulator:Emulator, rom:ROM, mapper:Mapper)
 		{
 			_emulator = emulator;
 			_rom = rom;
@@ -197,15 +194,6 @@ package net.johnmercer.nes.system
 			_mem = new ByteArray();
 			_mem.endian = Endian.LITTLE_ENDIAN;
 			_mem.length = 0x0800;
-		}
-		
-		private function onEnterFrame(e:Event):void
-		{
-			if (_debugStr != "")
-			{
-				_emulator.log(_debugStr, false);
-				_debugStr = "";
-			}
 		}
 		
 		public function loadRom(rom:ROM):void
@@ -266,8 +254,8 @@ package net.johnmercer.nes.system
 			}
 			var endTime:int = getTimer();
 			var deltaTime:Number = (endTime - startTime);
-			trace("Finished execution: " + numInstructions + " in " + deltaTime + " milliseconds (" +
-			(numInstructions / deltaTime) + "KIPS).");
+			trace("Finished execution: " + numInstructions + " in " + deltaTime + " milliseconds (" + (numInstructions / deltaTime) + "KIPS).");
+			trace(_cycleCount + " cycles: " + (_cycleCount / deltaTime / 1000) + "MHz.");
 		}
 		
 		public function execute():void
@@ -278,82 +266,84 @@ package net.johnmercer.nes.system
 			param2 = int.MAX_VALUE;
 			paramWord = int.MAX_VALUE;
 			
-			_currentState.address = PC;
+			if (Globals.MODE != Globals.NORMAL)
+			{
+				_currentState.address = PC;
+			}
 			
 			instruction = readUnsignedByte(PC++);
 			addressingMode = INST_ADDR_MODE[instruction];
 			
-			_currentState.opcode = instruction;
 			//  Used by automated testing
-			switch(addressingMode)
+			if (Globals.MODE != Globals.NORMAL)
 			{
-				// Two bytes for an unsigned word
-				case ABS:
-				case ABX:
-				case ABY:
-				case IND:
-					paramWord = readUnsignedWord(PC);
-					break;
+				_currentState.opcode = instruction;
+				switch (addressingMode)
+				{
+					// Two bytes for an unsigned word
+					case ABS: 
+					case ABX: 
+					case ABY: 
+					case IND: 
+						paramWord = readUnsignedWord(PC);
+						break;
 					
-				// One byte for a signed value
-				case IMM:
-				case REL:
-					param1 = readByte(PC);
-					break;
+					// One byte for a signed value
+					case IMM: 
+					case REL: 
+						param1 = readByte(PC);
+						break;
 					
-				// One byte for an unsigned value
-				case ZPG:
-				case ZPX:
-				case ZPY:
-				case INX:
-				case INY:
-					param1 = readUnsignedByte(PC);
-					break;
+					// One byte for an unsigned value
+					case ZPG: 
+					case ZPX: 
+					case ZPY: 
+					case INX: 
+					case INY: 
+						param1 = readUnsignedByte(PC);
+						break;
 					
-				// No paramaters
-				case IMP:
-				case ACM:
-					break;
-				default:
-					_emulator.log("Unimplemented Addressing Mode: " + addressingMode);
-					_currentState.error = true;
-					break;
+					// No paramaters
+					case IMP: 
+					case ACM: 
+						break;
+					default: 
+						_emulator.log("Unimplemented Addressing Mode: " + addressingMode);
+						_currentState.error = true;
+						break;
+				}
+				if (paramWord < int.MAX_VALUE)
+				{
+					param1 = paramWord & 0xff;
+					param2 = (paramWord & 0xff00) >> 8;
+				}
+				
+				_currentState.param1 = param1 == int.MAX_VALUE ? param1 : param1 & 0xFF;
+				_currentState.param2 = param2 == int.MAX_VALUE ? param2 : param2 & 0xFF;
+				_currentState.A = A;
+				_currentState.X = X;
+				_currentState.Y = Y;
+				_currentState.P = P;
+				_currentState.SP = SP;
+				_currentState.CYC = _cycleCount;
+				_currentState.SL = _scanLine;
 			}
-			if (paramWord < int.MAX_VALUE)
-			{
-				param1 = paramWord & 0xff;
-				param2 = (paramWord & 0xff00) >> 8;
-			}
-			
-			_currentState.param1 = param1 == int.MAX_VALUE ? param1 : param1 & 0xFF;
-			_currentState.param2 = param2 == int.MAX_VALUE ? param2 : param2 & 0xFF;
-			_currentState.A = A;
-			_currentState.X = X;
-			_currentState.Y = Y;
-			_currentState.P = P;
-			_currentState.SP = SP;
-			_currentState.CYC = _cycleCount;
-			_currentState.SL = _scanLine;
-			
-			_debugStr += paramsToStr(param1, param2, paramWord, instruction, addressingMode);
-			_debugStr += stateToStr();
-			
 			
 			// execute instruction			
-			_instructions[instruction]();	
-			
-			
-			// Calculate scanline
-			if (_cycleCount >= 341)
-			{
-				_scanLine++;
-				_cycleCount -= 341;
-			}
-			if (_scanLine > 260)
-			{
-				_scanLine -= 262;
-			}
-			
+			_instructions[instruction]();
+		
+		/*
+		   // Calculate scanline
+		   if (_cycleCount >= 341)
+		   {
+		   _scanLine++;
+		   _cycleCount -= 341;
+		   }
+		   if (_scanLine > 260)
+		   {
+		   _scanLine -= 262;
+		   }
+		 */
 		}
 		
 		// Memory access
@@ -373,13 +363,13 @@ package net.johnmercer.nes.system
 		
 		private function writeByte(addr:uint, value:uint):void
 		{
-			if (addr < 0x1800)  // Internal Ram
+			if (addr < 0x1800) // Internal Ram
 			{
 				addr &= 0xFFFF;
 				_mem.position = addr;
 				_mem.writeByte(value);
 			}
-			else if (addr < 0x4000)  // PPU Registers
+			else if (addr < 0x4000) // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Write PPU Register
@@ -397,13 +387,13 @@ package net.johnmercer.nes.system
 		private function readByte(addr:uint):int
 		{
 			// Determine where we are trying to read
-			if (addr < 0x1800)  // Internal Ram
+			if (addr < 0x1800) // Internal Ram
 			{
 				addr &= 0x0FFF;
 				_mem.position = addr;
 				return _mem.readByte();
 			}
-			else if (addr < 0x4000)  // PPU Registers
+			else if (addr < 0x4000) // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Get PPU Register
@@ -416,20 +406,20 @@ package net.johnmercer.nes.system
 			}
 			else
 			{
-				return _mapper.readByte(addr);
+				return _mapper.readPrgRomByte(addr);
 			}
 		}
 		
 		private function readUnsignedByte(addr:uint):uint
 		{
 			// Determine where we are trying to read
-			if (addr < 0x1800)  // Internal Ram
+			if (addr < 0x1800) // Internal Ram
 			{
 				addr &= 0x0FFF;
 				_mem.position = addr;
 				return _mem.readUnsignedByte();
 			}
-			else if (addr < 0x4000)  // PPU Registers
+			else if (addr < 0x4000) // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Get PPU Register
@@ -442,20 +432,20 @@ package net.johnmercer.nes.system
 			}
 			else
 			{
-				return _mapper.readUnsignedByte(addr);
+				return _mapper.readPrgRomUnsignedByte(addr);
 			}
 		}
-
+		
 		private function readWord(addr:uint):int
 		{
 			// Determine where we are trying to read
-			if (addr < 0x1800)  // Internal Ram
+			if (addr < 0x1800) // Internal Ram
 			{
 				addr &= 0x0FFF;
 				_mem.position = addr;
 				return _mem.readShort();
 			}
-			else if (addr < 0x4000)  // PPU Registers
+			else if (addr < 0x4000) // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Get PPU Register
@@ -468,19 +458,20 @@ package net.johnmercer.nes.system
 			}
 			else
 			{
-				return _mapper.readWord(addr);
+				return _mapper.readPrgRomWord(addr);
 			}
 		}
+		
 		private function readUnsignedWord(addr:uint):uint
 		{
 			// Determine where we are trying to read
-			if (addr < 0x1800)  // Internal Ram
+			if (addr < 0x1800) // Internal Ram
 			{
 				addr &= 0x0FFF;
 				_mem.position = addr;
 				return _mem.readUnsignedShort();
 			}
-			else if (addr < 0x4000)  // PPU Registers
+			else if (addr < 0x4000) // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Get PPU Register
@@ -493,7 +484,7 @@ package net.johnmercer.nes.system
 			}
 			else
 			{
-				return _mapper.readUnsignedWord(addr);
+				return _mapper.readPrgRomUnsignedWord(addr);
 			}
 		}
 		
@@ -551,9 +542,9 @@ package net.johnmercer.nes.system
 				_cycleCount += 15;
 			else
 				_cycleCount += 12;
-			
+		
 		}
-			
+		
 		private function instrADC_ABY():void
 		{
 			paramWord = readUnsignedWord(PC);
@@ -575,19 +566,19 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF)  // Page boundary
+			if (value == 0xFF) // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
 				value = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(value);
 			instrADC(value);
 			_cycleCount += 18;
 		}
-			
+		
 		private function instrADC_INY():void
 		{
 			param1 = readUnsignedByte(PC++);
@@ -623,17 +614,17 @@ package net.johnmercer.nes.system
 				P |= NEGATIVE_FLAG;
 			if (result & 0x100)
 				P |= CARRY_FLAG;
-
+			
 			var sign:uint = 0;
 			// Overflow if A and Value have the same sign, but result is a different sign
 			// Could check wtih (A & V & ~R | ~A & ~V & R) & 0x80 .. is that faster?
 			if (((sign = A & 0x80) == (value & 0x80)) && (sign != (result & 0x80)))
 				P |= OVERFLOW_FLAG;
 			
-			result &= 0xFF;	
+			result &= 0xFF;
 			if (result == 0)
 				P |= ZERO_FLAG;
-				
+			
 			A = result;
 		}
 		
@@ -712,14 +703,14 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF)  // Page boundary
+			if (value == 0xFF) // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
 				value = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(value);
 			instrAND(value);
 			_cycleCount += 18;
@@ -737,7 +728,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			value = (addr + Y) & 0xFFFF;
 			value = readUnsignedByte(value);
 			instrAND(value);
@@ -750,16 +741,16 @@ package net.johnmercer.nes.system
 		}
 		
 		private function instrAND(value:uint):void
-		{			
+		{
 			A = A & value & 0xFF;
 			
-			P &= 0x7D;  // Clear Negative and Zero Flag
+			P &= 0x7D; // Clear Negative and Zero Flag
 			
 			if (A == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (A & 0x80)
-				P |= NEGATIVE_FLAG;			
+				P |= NEGATIVE_FLAG;
 		}
 		
 		private function instrASL_ACM():void
@@ -816,23 +807,22 @@ package net.johnmercer.nes.system
 			instrASL(value);
 			_cycleCount += 21;
 		}
-			
 		
 		private function instrASL(value:uint):void
-		{			
+		{
 			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
 			
 			if (value & 0x100)
 				P |= CARRY_FLAG;
-				
+			
 			value &= 0xFF;
 			
 			if (value == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (value & 0x80)
 				P |= NEGATIVE_FLAG;
-			
+		
 		}
 		
 		private function instrBCC_REL():void
@@ -842,11 +832,11 @@ package net.johnmercer.nes.system
 			_cycleCount += 6;
 			if ((P & CARRY_FLAG) == 0)
 			{
-				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))				
+				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
 					_cycleCount += 3;
 				else
 					_cycleCount += 6;
-				PC = (PC + rel) & 0xFFFF;				
+				PC = (PC + rel) & 0xFFFF;
 			}
 		}
 		
@@ -857,11 +847,11 @@ package net.johnmercer.nes.system
 			_cycleCount += 6;
 			if (P & CARRY_FLAG)
 			{
-				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))				
+				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
 					_cycleCount += 3;
 				else
 					_cycleCount += 6;
-				PC  = (PC + rel) & 0xFFFF;
+				PC = (PC + rel) & 0xFFFF;
 			}
 		}
 		
@@ -872,7 +862,7 @@ package net.johnmercer.nes.system
 			_cycleCount += 6;
 			if (P & ZERO_FLAG)
 			{
-				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))				
+				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
 					_cycleCount += 3;
 				else
 					_cycleCount += 6;
@@ -889,6 +879,7 @@ package net.johnmercer.nes.system
 			instrBIT(value);
 			_cycleCount += 9;
 		}
+		
 		private function instrBIT_ABS():void
 		{
 			paramWord = readUnsignedWord(PC);
@@ -906,7 +897,7 @@ package net.johnmercer.nes.system
 			P &= 0x3D; // Clear Zero, Overflow, and Negative Flag
 			if (result == 0)
 				P |= ZERO_FLAG
-				
+			
 			if (value & 0x80)
 				P |= NEGATIVE_FLAG;
 			
@@ -919,9 +910,9 @@ package net.johnmercer.nes.system
 			param1 = readByte(PC++);
 			var rel:int = param1;
 			_cycleCount += 6;
-			if (P &  NEGATIVE_FLAG)
+			if (P & NEGATIVE_FLAG)
 			{
-				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))				
+				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
 					_cycleCount += 3;
 				else
 					_cycleCount += 6;
@@ -936,7 +927,7 @@ package net.johnmercer.nes.system
 			_cycleCount += 6;
 			if ((P & ZERO_FLAG) == 0)
 			{
-				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))				
+				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
 					_cycleCount += 3;
 				else
 					_cycleCount += 6;
@@ -951,7 +942,7 @@ package net.johnmercer.nes.system
 			_cycleCount += 6;
 			if ((P & NEGATIVE_FLAG) == 0)
 			{
-				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))				
+				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
 					_cycleCount += 3;
 				else
 					_cycleCount += 6;
@@ -965,7 +956,7 @@ package net.johnmercer.nes.system
 			pushStack(PC & 0xFF);
 			pushStack(P);
 			PC = readUnsignedWord(0xFFFE);
-
+			
 			P |= BREAK_FLAG;
 			_cycleCount += 21;
 		}
@@ -977,7 +968,7 @@ package net.johnmercer.nes.system
 			_cycleCount += 6;
 			if ((P & OVERFLOW_FLAG) == 0)
 			{
-				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))				
+				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
 					_cycleCount += 3;
 				else
 					_cycleCount += 6;
@@ -992,7 +983,7 @@ package net.johnmercer.nes.system
 			_cycleCount += 6;
 			if (P & OVERFLOW_FLAG)
 			{
-				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))				
+				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
 					_cycleCount += 3;
 				else
 					_cycleCount += 6;
@@ -1002,7 +993,7 @@ package net.johnmercer.nes.system
 		
 		private function instrCLC_IMP():void
 		{
-			P &=  ~CARRY_FLAG;
+			P &= ~CARRY_FLAG;
 			_cycleCount += 6;
 		}
 		
@@ -1029,7 +1020,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var value:uint = 0;
 			value = param1 & 0xFF;
-			instrCMP(value);			
+			instrCMP(value);
 			_cycleCount += 6;
 		}
 		
@@ -1097,14 +1088,14 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF)  // Page boundary
+			if (value == 0xFF) // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
 				value = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(value);
 			instrCMP(value);
 			_cycleCount += 18;
@@ -1122,7 +1113,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			value = (addr + Y) & 0xFFFF;
 			value = readUnsignedByte(value);
 			instrCMP(value);
@@ -1134,7 +1125,7 @@ package net.johnmercer.nes.system
 		}
 		
 		private function instrCMP(value:uint):void
-		{			
+		{
 			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
 			
 			if (A >= value)
@@ -1142,7 +1133,7 @@ package net.johnmercer.nes.system
 			
 			if (A == value)
 				P |= ZERO_FLAG;
-				
+			
 			if ((A - value) & 0x80)
 				P |= NEGATIVE_FLAG;
 		}
@@ -1177,7 +1168,7 @@ package net.johnmercer.nes.system
 		}
 		
 		private function instrCPX(value:uint):void
-		{			
+		{
 			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
 			
 			if (X >= value)
@@ -1185,7 +1176,7 @@ package net.johnmercer.nes.system
 			
 			if (X == value)
 				P |= ZERO_FLAG;
-				
+			
 			if ((X - value) & 0x80)
 				P |= NEGATIVE_FLAG;
 		}
@@ -1220,7 +1211,7 @@ package net.johnmercer.nes.system
 		}
 		
 		private function instrCPY(value:uint):void
-		{			
+		{
 			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
 			
 			if (Y >= value)
@@ -1228,7 +1219,7 @@ package net.johnmercer.nes.system
 			
 			if (Y == value)
 				P |= ZERO_FLAG;
-				
+			
 			if ((Y - value) & 0x80)
 				P |= NEGATIVE_FLAG;
 		}
@@ -1278,12 +1269,12 @@ package net.johnmercer.nes.system
 			instrDEC(value);
 			_cycleCount += 21;
 		}
-			
+		
 		private function instrDEC(value:uint):void
 		{
 			P &= ~(ZERO_FLAG | NEGATIVE_FLAG);
 			
-			if (value == 0)			
+			if (value == 0)
 				P |= ZERO_FLAG;
 			
 			if (value & 0x80)
@@ -1298,10 +1289,10 @@ package net.johnmercer.nes.system
 			
 			if (X == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (X & 0x80)
 				P |= NEGATIVE_FLAG;
-				
+			
 			_cycleCount += 6;
 		}
 		
@@ -1313,7 +1304,7 @@ package net.johnmercer.nes.system
 			
 			if (Y == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (Y & 0x80)
 				P |= NEGATIVE_FLAG;
 			
@@ -1371,7 +1362,7 @@ package net.johnmercer.nes.system
 				_cycleCount += 12;
 			else
 				_cycleCount += 15;
-			
+		
 		}
 		
 		private function instrEOR_ABY():void
@@ -1394,14 +1385,14 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF)  // Page boundary
+			if (value == 0xFF) // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
 				value = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(value);
 			instrEOR(value);
 			_cycleCount += 18;
@@ -1411,7 +1402,7 @@ package net.johnmercer.nes.system
 		{
 			param1 = readUnsignedByte(PC++);
 			var addr:uint = 0;
-			var value:uint = 0;			
+			var value:uint = 0;
 			if (param1 == 0xFF)
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
@@ -1419,7 +1410,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			value = (addr + Y) & 0xFFFF;
 			value = readUnsignedByte(value);
 			instrEOR(value);
@@ -1429,7 +1420,6 @@ package net.johnmercer.nes.system
 			else
 				_cycleCount += 18;
 		}
-		
 		
 		private function instrEOR(value:uint):void
 		{
@@ -1491,12 +1481,12 @@ package net.johnmercer.nes.system
 		{
 			P &= ~(ZERO_FLAG | NEGATIVE_FLAG);
 			
-			if (value == 0)			
+			if (value == 0)
 				P |= ZERO_FLAG;
 			
 			if (value & 0x80)
 				P |= NEGATIVE_FLAG;
-				
+		
 		}
 		
 		private function instrINX_IMP():void
@@ -1507,10 +1497,10 @@ package net.johnmercer.nes.system
 			
 			if (X == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (X & 0x80)
 				P |= NEGATIVE_FLAG;
-				
+			
 			_cycleCount += 6;
 		}
 		
@@ -1522,10 +1512,10 @@ package net.johnmercer.nes.system
 			
 			if (Y == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (Y & 0x80)
 				P |= NEGATIVE_FLAG;
-				
+			
 			_cycleCount += 6;
 		}
 		
@@ -1544,7 +1534,7 @@ package net.johnmercer.nes.system
 			if (paramWord & 0xFF == 0xFF)
 			{
 				PC = readUnsignedByte(paramWord);
-				paramWord &= 0xFF00;  // +1, -100
+				paramWord &= 0xFF00; // +1, -100
 				PC |= readUnsignedByte(paramWord) << 8;
 			}
 			else
@@ -1557,7 +1547,7 @@ package net.johnmercer.nes.system
 		private function instrJSR_ABS():void
 		{
 			paramWord = readUnsignedWord(PC);
-			PC++;  // JSR saves PC - 1 to stack, no need to +2 then -1
+			PC++; // JSR saves PC - 1 to stack, no need to +2 then -1
 			pushStack((PC & 0xFF00) >> 8);
 			pushStack(PC & 0xFF);
 			PC = paramWord;
@@ -1631,14 +1621,14 @@ package net.johnmercer.nes.system
 			var addr:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF)  // Page boundary
+			if (addr == 0xFF) // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
 				addr = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			A = readUnsignedByte(addr);
 			instrLDA();
 			_cycleCount += 18;
@@ -1655,12 +1645,12 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			addr = (addr + Y) & 0xFFFF;
 			A = readUnsignedByte(addr);
 			instrLDA();
 			// Check for page boundary cross
-			if ((addr & 0xFF00) == ((addr - Y) & 0xFF00))			
+			if ((addr & 0xFF00) == ((addr - Y) & 0xFF00))
 				_cycleCount += 15;
 			else
 				_cycleCount += 18;
@@ -1672,7 +1662,7 @@ package net.johnmercer.nes.system
 			
 			if (A == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (A & 0x80)
 				P |= NEGATIVE_FLAG;
 		}
@@ -1724,7 +1714,6 @@ package net.johnmercer.nes.system
 			else
 				_cycleCount += 15;
 		}
-			
 		
 		private function instrLDX():void
 		{
@@ -1732,7 +1721,7 @@ package net.johnmercer.nes.system
 			
 			if (X == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (X & 0x80)
 				P |= NEGATIVE_FLAG;
 		}
@@ -1784,14 +1773,14 @@ package net.johnmercer.nes.system
 			else
 				_cycleCount += 15;
 		}
-			
+		
 		private function instrLDY():void
 		{
 			P &= 0x7D; // Clear Zero and Negative Flags
 			
 			if (Y == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (Y & 0x80)
 				P |= NEGATIVE_FLAG;
 		}
@@ -1869,10 +1858,10 @@ package net.johnmercer.nes.system
 			
 			if (result == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (result & 0x80)
 				P |= NEGATIVE_FLAG;
-			
+		
 		}
 		
 		private function instrNOP_IMP():void
@@ -1995,14 +1984,14 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF)  // Page boundary
+			if (value == 0xFF) // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
 				value = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(value);
 			instrORA(value);
 			_cycleCount += 18;
@@ -2020,7 +2009,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			value = (addr + Y) & 0xFFFF;
 			value = readUnsignedByte(value);
 			instrORA(value);
@@ -2049,7 +2038,7 @@ package net.johnmercer.nes.system
 		
 		private function instrPHP_IMP():void
 		{
-			pushStack(P | BREAK_FLAG);  // Break flag is always pushed with a 1			
+			pushStack(P | BREAK_FLAG); // Break flag is always pushed with a 1			
 			_cycleCount += 9;
 		}
 		
@@ -2131,9 +2120,8 @@ package net.johnmercer.nes.system
 			_cycleCount += 21;
 		}
 		
-		
 		private function instrROL(value:uint):void
-		{	
+		{
 			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
 			if (value & 0x100)
 				P |= CARRY_FLAG;
@@ -2142,7 +2130,7 @@ package net.johnmercer.nes.system
 			
 			if (value == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (value & 0x80)
 				P |= NEGATIVE_FLAG;
 		}
@@ -2213,14 +2201,14 @@ package net.johnmercer.nes.system
 		}
 		
 		private function instrROR(value:uint, result:uint):void
-		{			
+		{
 			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
 			if (value & 0x01)
 				P |= CARRY_FLAG;
 			
 			if (result == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (result & 0x80)
 				P |= NEGATIVE_FLAG;
 		}
@@ -2314,14 +2302,14 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF)  // Page boundary
+			if (value == 0xFF) // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
 				value = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(value);
 			instrSBC(value);
 			_cycleCount += 18;
@@ -2339,7 +2327,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			value = (addr + Y) & 0xFFFF;
 			value = readUnsignedByte(value);
 			instrSBC(value);
@@ -2350,33 +2338,32 @@ package net.johnmercer.nes.system
 				_cycleCount += 18;
 		}
 		
-		
 		private function instrSBC(value:uint):void
 		{
 			// A,Z,C,N = A-M-(1-C)
 			var result:uint = A - value;
 			if ((P & CARRY_FLAG) == 0)
-				result--;			
+				result--;
 			
 			P &= ~(NEGATIVE_FLAG | OVERFLOW_FLAG | ZERO_FLAG);
-
+			
 			if (result & 0x80)
 				P |= NEGATIVE_FLAG;
 			
 			P |= CARRY_FLAG;
 			if (result & 0x100)
 				P &= ~CARRY_FLAG;
-
+			
 			var sign:uint = 0;
 			// Overflow if neg - pos = pos or pos - neg = neg
 			
 			if (((sign = A & 0x80) != (value & 0x80)) && (sign != (result & 0x80)))
 				P |= OVERFLOW_FLAG;
 			
-			result &= 0xFF;	
+			result &= 0xFF;
 			if (result == 0)
 				P |= ZERO_FLAG;
-				
+			
 			A = result;
 		}
 		
@@ -2458,7 +2445,7 @@ package net.johnmercer.nes.system
 		{
 			param1 = readUnsignedByte(PC++);
 			var addr:uint = 0;
-			if (param1 == 0xFF)  // Page Boundary
+			if (param1 == 0xFF) // Page Boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
@@ -2486,7 +2473,7 @@ package net.johnmercer.nes.system
 			_cycleCount += 12;
 		}
 		
-		private function instrSTX_ABS():void		
+		private function instrSTX_ABS():void
 		{
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
@@ -2510,7 +2497,7 @@ package net.johnmercer.nes.system
 			_cycleCount += 12;
 		}
 		
-		private function instrSTY_ABS():void		
+		private function instrSTY_ABS():void
 		{
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
@@ -2526,7 +2513,7 @@ package net.johnmercer.nes.system
 			
 			if (X == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (X & 0x80)
 				P |= NEGATIVE_FLAG;
 			_cycleCount += 6;
@@ -2540,7 +2527,7 @@ package net.johnmercer.nes.system
 			
 			if (Y == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (Y & 0x80)
 				P |= NEGATIVE_FLAG;
 			_cycleCount += 6;
@@ -2554,7 +2541,7 @@ package net.johnmercer.nes.system
 			
 			if (X == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (X & 0x80)
 				P |= NEGATIVE_FLAG;
 			_cycleCount += 6;
@@ -2568,7 +2555,7 @@ package net.johnmercer.nes.system
 			
 			if (A == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (A & 0x80)
 				P |= NEGATIVE_FLAG;
 			_cycleCount += 6;
@@ -2588,7 +2575,7 @@ package net.johnmercer.nes.system
 			
 			if (A == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (A & 0x80)
 				P |= NEGATIVE_FLAG;
 			_cycleCount += 6;
@@ -2700,14 +2687,14 @@ package net.johnmercer.nes.system
 			var value:int = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF)  // Page boundary
+			if (addr == 0xFF) // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
 				addr = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = (readByte(addr) - 1);
 			writeByte(addr, value & 0xFF);
 			instrDCP(value);
@@ -2725,13 +2712,12 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			addr = (addr + Y) & 0xFFFF;
 			value = (readByte(addr) - 1);
 			writeByte(addr, value & 0xFF);
 			instrDCP(value);
 		}
-			
 		
 		private function instrDCP(value:uint):void
 		{
@@ -2742,10 +2728,10 @@ package net.johnmercer.nes.system
 			
 			if (A == (value & 0xFF))
 				P |= ZERO_FLAG;
-				
+			
 			if ((A - value) & 0x80)
 				P |= NEGATIVE_FLAG;
-			
+		
 		}
 		
 		private function instrISB_ZPG():void
@@ -2807,14 +2793,14 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF)  // Page boundary
+			if (addr == 0xFF) // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
 				addr = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = (readByte(addr) + 1) & 0xFF;
 			writeByte(addr, value);
 			instrISB(value);
@@ -2832,7 +2818,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			addr = (addr + Y) & 0xFFFF;
 			value = (readByte(addr) + 1) & 0xFF;
 			writeByte(addr, value);
@@ -2840,34 +2826,34 @@ package net.johnmercer.nes.system
 		}
 		
 		private function instrISB(value:uint):void
-		{			
+		{
 			// A,Z,C,N = A-M-(1-C)
 			var result:uint = A - value;
 			
 			if ((P & CARRY_FLAG) == 0)
-				result--;			
+				result--;
 			
 			P &= ~(NEGATIVE_FLAG | OVERFLOW_FLAG | ZERO_FLAG);
-
+			
 			if (result & 0x80)
 				P |= NEGATIVE_FLAG;
 			
 			P |= CARRY_FLAG;
 			if (result & 0x100)
 				P &= ~CARRY_FLAG;
-
+			
 			var sign:uint = 0;
 			// Overflow if neg - pos = pos or pos - neg = neg
 			
 			if (((sign = A & 0x80) != (value & 0x80)) && (sign != (result & 0x80)))
 				P |= OVERFLOW_FLAG;
 			
-			result &= 0xFF;	
+			result &= 0xFF;
 			if (result == 0)
 				P |= ZERO_FLAG;
-				
+			
 			A = result;
-				
+		
 		}
 		
 		private function instrLAS_ABY():void
@@ -2883,7 +2869,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			_mem.position = param1;
 			A = _mem.readUnsignedByte();
-			instrLAX();			
+			instrLAX();
 		}
 		
 		private function instrLAX_ZPY():void
@@ -2891,7 +2877,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			_mem.position = (param1 + Y) & 0xFF;
 			A = _mem.readUnsignedByte();
-			instrLAX();			
+			instrLAX();
 		}
 		
 		private function instrLAX_ABS():void
@@ -2899,7 +2885,7 @@ package net.johnmercer.nes.system
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
 			A = readUnsignedByte(paramWord);
-			instrLAX();			
+			instrLAX();
 		}
 		
 		private function instrLAX_ABY():void
@@ -2907,7 +2893,7 @@ package net.johnmercer.nes.system
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
 			A = readUnsignedByte((paramWord + Y) & 0xFFFF);
-			instrLAX();			
+			instrLAX();
 		}
 		
 		private function instrLAX_INX():void
@@ -2916,16 +2902,16 @@ package net.johnmercer.nes.system
 			var addr:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF)  // Page boundary
+			if (addr == 0xFF) // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
 				addr = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			A = readUnsignedByte(addr);
-			instrLAX();			
+			instrLAX();
 		}
 		
 		private function instrLAX_INY():void
@@ -2939,12 +2925,11 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			addr = (addr + Y) & 0xFFFF;
 			A = readUnsignedByte(addr);
-			instrLAX();			
+			instrLAX();
 		}
-		
 		
 		private function instrLAX():void
 		{
@@ -2952,7 +2937,7 @@ package net.johnmercer.nes.system
 			
 			if (A == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (A & 0x80)
 				P |= NEGATIVE_FLAG;
 			
@@ -3031,14 +3016,14 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF)  // Page boundary
+			if (addr == 0xFF) // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
 				addr = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(addr);
 			value = (value << 1) | (P & CARRY_FLAG);
 			writeByte(addr, value & 0xFF);
@@ -3057,7 +3042,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			addr = (addr + Y) & 0xFFFF;
 			value = readUnsignedByte(addr);
 			value = (value << 1) | (P & CARRY_FLAG);
@@ -3068,7 +3053,7 @@ package net.johnmercer.nes.system
 		private function instrRLA(value:uint):void
 		{
 			A = A & value & 0xFF;
-						
+			
 			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
 			if (value & 0x100)
 				P |= CARRY_FLAG;
@@ -3077,9 +3062,9 @@ package net.johnmercer.nes.system
 			
 			if (A == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (A & 0x80)
-				P |= NEGATIVE_FLAG;	
+				P |= NEGATIVE_FLAG;
 		}
 		
 		private function instrRRA_ACM():void
@@ -3162,14 +3147,14 @@ package net.johnmercer.nes.system
 			var result:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF)  // Page boundary
+			if (addr == 0xFF) // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
 				addr = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(addr);
 			result = (value >> 1) | ((P & CARRY_FLAG) << 7);
 			writeByte(addr, result);
@@ -3189,7 +3174,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			addr = (addr + Y) & 0xFFFF;
 			value = readUnsignedByte(addr);
 			result = (value >> 1) | ((P & CARRY_FLAG) << 7);
@@ -3197,9 +3182,8 @@ package net.johnmercer.nes.system
 			instrRRA(value, result);
 		}
 		
-		
 		private function instrRRA(value:uint, result:uint):void
-		{			
+		{
 			P &= ~(NEGATIVE_FLAG | CARRY_FLAG | OVERFLOW_FLAG | ZERO_FLAG);
 			
 			if (value & 0x01)
@@ -3217,18 +3201,18 @@ package net.johnmercer.nes.system
 				P |= NEGATIVE_FLAG;
 			if (result & 0x100)
 				P |= CARRY_FLAG;
-
+			
 			var sign:uint = 0;
 			// Overflow if A and Value have the same sign, but result is a different sign
 			// Could check wtih (A & V & ~R | ~A & ~V & R) & 0x80 .. is that faster?
 			if (((sign = A & 0x80) == (value & 0x80)) && (sign != (result & 0x80)))
 				P |= OVERFLOW_FLAG;
 			
-			result &= 0xFF;	
+			result &= 0xFF;
 			if (result == 0)
 				P |= ZERO_FLAG;
-				
-			A = result;			
+			
+			A = result;
 		}
 		
 		private function instrSAX_ZPG():void
@@ -3245,14 +3229,14 @@ package net.johnmercer.nes.system
 			_mem.writeByte(A & X);
 		}
 		
-		private function instrSAX_ABS():void		
+		private function instrSAX_ABS():void
 		{
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
 			writeByte(paramWord, A & X);
 		}
 		
-		private function instrSAX_INX():void		
+		private function instrSAX_INX():void
 		{
 			param1 = readUnsignedByte(PC++);
 			var addr:uint;
@@ -3372,14 +3356,14 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF)  // Page boundary
+			if (addr == 0xFF) // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
 				addr = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(addr) << 1;
 			writeByte(addr, value & 0xFF);
 			instrSLO(value);
@@ -3397,7 +3381,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			addr = (addr + Y) & 0xFFFF;
 			value = readUnsignedByte(addr) << 1;
 			writeByte(addr, value & 0xFF);
@@ -3405,7 +3389,7 @@ package net.johnmercer.nes.system
 		}
 		
 		private function instrSLO(value:uint):void
-		{			
+		{
 			A = A | value & 0xFF;
 			
 			P &= ~(ZERO_FLAG | NEGATIVE_FLAG | CARRY_FLAG);
@@ -3415,7 +3399,7 @@ package net.johnmercer.nes.system
 				P |= NEGATIVE_FLAG;
 			if (value & 0x100)
 				P |= CARRY_FLAG;
-
+		
 		}
 		
 		private function instrSRE_ACM():void
@@ -3498,14 +3482,14 @@ package net.johnmercer.nes.system
 			var result:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
 			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF)  // Page boundary
+			if (addr == 0xFF) // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
 				addr = _mem.readUnsignedShort(); // address
 			}
-				
+			
 			value = readUnsignedByte(addr);
 			result = value >> 1;
 			writeByte(addr, result);
@@ -3525,7 +3509,7 @@ package net.johnmercer.nes.system
 				_mem.position = param1;
 				addr = _mem.readUnsignedShort();
 			}
-				
+			
 			addr = (addr + Y) & 0xFFFF;
 			value = readUnsignedByte(addr);
 			result = value >> 1;
@@ -3534,17 +3518,17 @@ package net.johnmercer.nes.system
 		}
 		
 		private function instrSRE(value:uint, result:uint):void
-		{			
+		{
 			A = A ^ result;
 			
 			P &= ~(CARRY_FLAG | ZERO_FLAG | NEGATIVE_FLAG);
 			
 			if (value & 0x01)
 				P |= CARRY_FLAG;
-				
+			
 			if (A == 0)
 				P |= ZERO_FLAG;
-				
+			
 			if (A & 0x80)
 				P |= NEGATIVE_FLAG;
 		}
@@ -3554,7 +3538,7 @@ package net.johnmercer.nes.system
 		private function paramsToStr(p1:uint, p2:uint, pW:uint, inst:uint, addr:uint):String
 		{
 			var str:String = StringUtils.hexToStr(inst) + " ";
-
+			
 			if (pW != int.MAX_VALUE)
 			{
 				p1 = pW & 0x00FF;
@@ -3563,7 +3547,7 @@ package net.johnmercer.nes.system
 			
 			if (p1 != int.MAX_VALUE)
 			{
-				str += StringUtils.hexToStr(p1 & 0xFF) + " "; 
+				str += StringUtils.hexToStr(p1 & 0xFF) + " ";
 			}
 			else
 			{
@@ -3572,7 +3556,7 @@ package net.johnmercer.nes.system
 			
 			if (p2 != int.MAX_VALUE)
 			{
-				str += StringUtils.hexToStr(p2 & 0xFF) + "  "; 
+				str += StringUtils.hexToStr(p2 & 0xFF) + "  ";
 			}
 			else
 			{
@@ -3583,24 +3567,24 @@ package net.johnmercer.nes.system
 			
 			switch (addr)
 			{
-				case ABS:
+				case ABS: 
 					str += "ABS $";
 					str += StringUtils.hexToStr(pW & 0xFFFF, 4);
 					break;
-				case IMM:
+				case IMM: 
 					str += "IMM #$" + StringUtils.hexToStr(p1 & 0xFF);
 					break;
-				case ZPG:
+				case ZPG: 
 					str += "ZPG $" + StringUtils.hexToStr(p1 & 0xFF) + " = ";
 					_mem.position = p1 & 0xFF;
 					str += StringUtils.hexToStr(_mem.readUnsignedByte());
 					break;
-				case IMP:
+				case IMP: 
 					break;
-				case REL:
-					str += "REL $" + StringUtils.hexToStr((PC + p1) & 0x1FFFF,4);
+				case REL: 
+					str += "REL $" + StringUtils.hexToStr((PC + p1) & 0x1FFFF, 4);
 					break;
-				default:
+				default: 
 					str += "?????";
 			}
 			
@@ -3622,8 +3606,7 @@ package net.johnmercer.nes.system
 			str += " SL:" + _scanLine;
 			return str;
 		}
-
-		
+	
 	}
 
 }
