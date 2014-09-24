@@ -1,14 +1,11 @@
 package net.johnmercer.nes.system
 {
-	import flash.events.Event;
-	import flash.utils.ByteArray;
-	import flash.utils.Endian;
-	import flash.utils.getTimer;
-	import net.johnmercer.nes.enums.Globals;
-	import net.johnmercer.nes.tests.CPUState;
-	import net.johnmercer.nes.utils.Debug;
-	import net.johnmercer.nes.utils.StringUtils;
-	import net.johnmercer.nes.views.Emulator;
+	import flash.utils.*;
+	import net.johnmercer.nes.enums.*;
+	import net.johnmercer.nes.system.Mappers.*;
+	import net.johnmercer.nes.tests.*;
+	import net.johnmercer.nes.utils.*;
+	import net.johnmercer.nes.views.*;
 	
 	/**
 	 * ...
@@ -20,7 +17,7 @@ package net.johnmercer.nes.system
 		private static const CARRY_FLAG:uint    = 0x01;
 		private static const ZERO_FLAG:uint     = 0x02;
 		private static const IRQ_FLAG:uint      = 0x04;
-		private static const DECIMAL_FLAG:uint  = 0x08; // Unused
+		private static const DECIMAL_FLAG:uint  = 0x08;  // Unused
 		private static const BREAK_FLAG:uint    = 0x10;
 		private static const UNUSED_FLAG:uint   = 0x20;
 		private static const OVERFLOW_FLAG:uint = 0x40;
@@ -47,7 +44,7 @@ package net.johnmercer.nes.system
 		];
 		
 		// Names of instructions
-		private static var INST_NAME:Array = [
+		public static var INST_NAME:Array = [
 		/*0x00*/ "BRK", "ORA", "XXX", "SLO", "NOP", "ORA", "ASL", "SLO", "PHP", "ORA", "ASL", "ANC", "NOP", "ORA", "ASL", "SLO",
 		/*0x10*/ "BPL", "ORA", "XXX", "SLO", "NOP", "ORA", "ASL", "SLO", "CLC", "ORA", "NOP", "SLO", "NOP", "ORA", "ASL", "SLO",
 		/*0x20*/ "JSR", "AND", "XXX", "RLA", "BIT", "AND", "ROL", "RLA", "PLP", "AND", "ROL", "ANC", "BIT", "AND", "ROL", "RLA",
@@ -103,25 +100,25 @@ package net.johnmercer.nes.system
 		];
 		
 		// Addressing Types
-		private static const IMP:uint = 0; // Implicit
-		private static const IMM:uint = 1; // Immediate
-		private static const ZPG:uint = 2; // Zero Page
-		private static const ZPX:uint = 3; // Zero Page, X
-		private static const ZPY:uint = 4; // Zero Page, Y
-		private static const ABS:uint = 5; // Absolute
-		private static const ABX:uint = 6; // Absolute, X
-		private static const ABY:uint = 7; // Absolute, Y
-		private static const IND:uint = 8; // Indirect
-		private static const INX:uint = 9; // (Indirect, X)
-		private static const INY:uint = 10; // (Indirect), Y
-		private static const REL:uint = 11; // Relative
-		private static const ACM:uint = 12; // Accumulator
-		private static var ADDR_NAME:Array = [
+		private static const IMP:uint = 0;  // Implicit
+		private static const IMM:uint = 1;  // Immediate
+		private static const ZPG:uint = 2;  // Zero Page
+		private static const ZPX:uint = 3;  // Zero Page, X
+		private static const ZPY:uint = 4;  // Zero Page, Y
+		private static const ABS:uint = 5;  // Absolute
+		private static const ABX:uint = 6;  // Absolute, X
+		private static const ABY:uint = 7;  // Absolute, Y
+		private static const IND:uint = 8;  // Indirect
+		private static const INX:uint = 9;  // (Indirect, X)
+		private static const INY:uint = 10;  // (Indirect), Y
+		private static const REL:uint = 11;  // Relative
+		private static const ACM:uint = 12;  // Accumulator
+		public static var ADDR_NAME:Array = [
 		"IMP", "IMM", "ZPG", "ZPX", "ZPY", "ABS", "ABX", "ABY", "IND", "INX", "INY", "REL", "ACM"
 		];
 		
 		// Addressing mode of instruction
-		private static var INST_ADDR_MODE:Array = [
+		public static var INST_ADDR_MODE:Array = [
 		/*         0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F */
 		/*0x00*/ IMP, INX, IMM, INX, ZPG, ZPG, ZPG, ZPG, IMP, IMM, ACM, IMM, ABS, ABS, ABS, ABS,
 		/*0x10*/ REL, INY, IMP, INY, ZPX, ZPX, ZPX, ZPX, IMP, ABY, IMP, ABY, ABX, ABX, ABX, ABX,
@@ -176,18 +173,15 @@ package net.johnmercer.nes.system
 		private var _emulator:Emulator;
 		
 		// External Components
-		private var _rom:ROM;
-		private var _mapper:Mapper;
+		private var _mapper:IMapper;
 		
 		// Emulation values
 		private var _cycleCount:uint = 0;
 		private var _scanLine:int = 0;
 		
-		public function CPU(emulator:Emulator, rom:ROM, mapper:Mapper)
+		public function CPU(emulator:Emulator)
 		{
 			_emulator = emulator;
-			_rom = rom;
-			_mapper = mapper;
 			
 			_currentState = new CPUState();
 			
@@ -196,9 +190,10 @@ package net.johnmercer.nes.system
 			_mem.length = 0x0800;
 		}
 		
-		public function loadRom(rom:ROM):void
+		public function set mapper(value:IMapper):void
 		{
-			_rom = rom;
+			// TODO: Check for mapper before start/run/execute commands proceed
+			_mapper = value;
 		}
 		
 		public function get state():CPUState
@@ -206,9 +201,19 @@ package net.johnmercer.nes.system
 			return _currentState;
 		}
 		
+		public function get cycleCount():uint
+		{
+			return _cycleCount;
+		}
+		
+		public function resetCycleCount():void
+		{
+			_cycleCount = 0;
+		}
+		
 		public function start(address:uint):void
 		{
-			PC = address;
+			PC = readUnsignedWord(address);
 			_cycleCount = 0;
 			_scanLine = 241;
 			SP = 0xFD;
@@ -363,37 +368,47 @@ package net.johnmercer.nes.system
 		
 		private function writeByte(addr:uint, value:uint):void
 		{
-			if (addr < 0x1800) // Internal Ram
+			value &= 0xFF;
+			if (addr < 0x1800)  // Internal Ram
 			{
 				addr &= 0xFFFF;
 				_mem.position = addr;
 				_mem.writeByte(value);
 			}
-			else if (addr < 0x4000) // PPU Registers
+			else if (addr < 0x4000)  // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Write PPU Register
+				// for PPU Registers, add write to a queue with # clock cycles since VBI
 			}
 			else if (addr < 0x4020)
 			{
 				// Write NES APU/IO Values
 			}
-			else
+			else if (addr < 0x6000)  // Cartridge Expansion Rom??
 			{
-				//_mapper.writeByte(addr);
+				// Nothing to write
+			}
+			else if (addr < 0x8000)  // SRAM (save RAM)
+			{
+				
+			}
+			else  // PRG Rom
+			{
+				_mapper.writePrgRomByte(addr, value);
 			}
 		}
 		
 		private function readByte(addr:uint):int
 		{
 			// Determine where we are trying to read
-			if (addr < 0x1800) // Internal Ram
+			if (addr < 0x1800)  // Internal Ram
 			{
 				addr &= 0x0FFF;
 				_mem.position = addr;
 				return _mem.readByte();
 			}
-			else if (addr < 0x4000) // PPU Registers
+			else if (addr < 0x4000)  // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Get PPU Register
@@ -413,13 +428,13 @@ package net.johnmercer.nes.system
 		private function readUnsignedByte(addr:uint):uint
 		{
 			// Determine where we are trying to read
-			if (addr < 0x1800) // Internal Ram
+			if (addr < 0x1800)  // Internal Ram
 			{
 				addr &= 0x0FFF;
 				_mem.position = addr;
 				return _mem.readUnsignedByte();
 			}
-			else if (addr < 0x4000) // PPU Registers
+			else if (addr < 0x4000)  // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Get PPU Register
@@ -439,13 +454,13 @@ package net.johnmercer.nes.system
 		private function readWord(addr:uint):int
 		{
 			// Determine where we are trying to read
-			if (addr < 0x1800) // Internal Ram
+			if (addr < 0x1800)  // Internal Ram
 			{
 				addr &= 0x0FFF;
 				_mem.position = addr;
 				return _mem.readShort();
 			}
-			else if (addr < 0x4000) // PPU Registers
+			else if (addr < 0x4000)  // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Get PPU Register
@@ -465,13 +480,13 @@ package net.johnmercer.nes.system
 		private function readUnsignedWord(addr:uint):uint
 		{
 			// Determine where we are trying to read
-			if (addr < 0x1800) // Internal Ram
+			if (addr < 0x1800)  // Internal Ram
 			{
 				addr &= 0x0FFF;
 				_mem.position = addr;
 				return _mem.readUnsignedShort();
 			}
-			else if (addr < 0x4000) // PPU Registers
+			else if (addr < 0x4000)  // PPU Registers
 			{
 				addr &= 0x7;
 				// TODO: Get PPU Register
@@ -496,7 +511,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = param1 & 0xFF;
 			instrADC(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrADC_ZPG():void
@@ -506,7 +521,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			value = _mem.readUnsignedByte();
 			instrADC(value);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrADC_ZPX():void
@@ -516,7 +531,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			value = _mem.readUnsignedByte();
 			instrADC(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrADC_ABS():void
@@ -526,7 +541,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = readUnsignedByte(paramWord);
 			instrADC(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrADC_ABX():void
@@ -539,9 +554,9 @@ package net.johnmercer.nes.system
 			
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) != ((paramWord + X) & 0xFF00))
-				_cycleCount += 15;
+				_cycleCount += 5;
 			else
-				_cycleCount += 12;
+				_cycleCount += 4;
 		
 		}
 		
@@ -555,9 +570,9 @@ package net.johnmercer.nes.system
 			
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) != ((paramWord + Y) & 0xFF00))
-				_cycleCount += 15;
+				_cycleCount += 5;
 			else
-				_cycleCount += 12;
+				_cycleCount += 4;
 		}
 		
 		private function instrADC_INX():void
@@ -565,18 +580,18 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF) // Page boundary
+			value = (param1 + X) & 0xFF;  // Pointer to address
+			if (value == 0xFF)  // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
-				value = _mem.readUnsignedShort(); // address
+				value = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(value);
 			instrADC(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrADC_INY():void
@@ -597,9 +612,9 @@ package net.johnmercer.nes.system
 			
 			// Check for page boundary cross
 			if ((addr & 0xFF00) != ((addr + Y) & 0xFF00))
-				_cycleCount += 18;
+				_cycleCount += 6;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrADC(value:uint):void
@@ -634,7 +649,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = param1 & 0xFF;
 			instrAND(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrAND_ZPG():void
@@ -644,7 +659,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			value = _mem.readUnsignedByte();
 			instrAND(value);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrAND_ZPX():void
@@ -654,7 +669,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			value = _mem.readUnsignedByte();
 			instrAND(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrAND_ABS():void
@@ -664,7 +679,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = readUnsignedByte(paramWord);
 			instrAND(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrAND_ABX():void
@@ -677,9 +692,9 @@ package net.johnmercer.nes.system
 			
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) != ((paramWord + X) & 0xFF00))
-				_cycleCount += 15;
+				_cycleCount += 5;
 			else
-				_cycleCount += 12;
+				_cycleCount += 4;
 		}
 		
 		private function instrAND_ABY():void
@@ -692,9 +707,9 @@ package net.johnmercer.nes.system
 			
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) != ((paramWord + Y) & 0xFF00))
-				_cycleCount += 15;
+				_cycleCount += 5;
 			else
-				_cycleCount += 12;
+				_cycleCount += 4;
 		}
 		
 		private function instrAND_INX():void
@@ -702,18 +717,18 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF) // Page boundary
+			value = (param1 + X) & 0xFF;  // Pointer to address
+			if (value == 0xFF)  // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
-				value = _mem.readUnsignedShort(); // address
+				value = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(value);
 			instrAND(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrAND_INY():void
@@ -735,16 +750,16 @@ package net.johnmercer.nes.system
 			
 			// Check for page boundary cross
 			if ((addr & 0xFF00) != ((addr + Y) & 0xFF00))
-				_cycleCount += 18;
+				_cycleCount += 6;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrAND(value:uint):void
 		{
 			A = A & value & 0xFF;
 			
-			P &= 0x7D; // Clear Negative and Zero Flag
+			P &= 0x7D;  // Clear Negative and Zero Flag
 			
 			if (A == 0)
 				P |= ZERO_FLAG;
@@ -759,7 +774,7 @@ package net.johnmercer.nes.system
 			value = A << 1;
 			A = value & 0xFF;
 			instrASL(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrASL_ZPG():void
@@ -771,7 +786,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			_mem.writeByte(value & 0xFF);
 			instrASL(value);
-			_cycleCount += 15;
+			_cycleCount += 5;
 		}
 		
 		private function instrASL_ZPX():void
@@ -783,7 +798,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			_mem.writeByte(value & 0xFF);
 			instrASL(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrASL_ABS():void
@@ -794,7 +809,7 @@ package net.johnmercer.nes.system
 			value = readUnsignedByte(paramWord) << 1;
 			writeByte(paramWord, value & 0xFF);
 			instrASL(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrASL_ABX():void
@@ -805,7 +820,7 @@ package net.johnmercer.nes.system
 			value = readUnsignedByte((paramWord + X) & 0xFFFF) << 1;
 			writeByte((paramWord + X) & 0xFFFF, value & 0xFF);
 			instrASL(value);
-			_cycleCount += 21;
+			_cycleCount += 7;
 		}
 		
 		private function instrASL(value:uint):void
@@ -829,13 +844,13 @@ package net.johnmercer.nes.system
 		{
 			param1 = readUnsignedByte(PC++);
 			var rel:int = param1;
-			_cycleCount += 6;
+			_cycleCount += 2;
 			if ((P & CARRY_FLAG) == 0)
 			{
 				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
-					_cycleCount += 3;
+					_cycleCount += 1;
 				else
-					_cycleCount += 6;
+					_cycleCount += 2;
 				PC = (PC + rel) & 0xFFFF;
 			}
 		}
@@ -844,13 +859,13 @@ package net.johnmercer.nes.system
 		{
 			param1 = readUnsignedByte(PC++);
 			var rel:int = param1;
-			_cycleCount += 6;
+			_cycleCount += 2;
 			if (P & CARRY_FLAG)
 			{
 				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
-					_cycleCount += 3;
+					_cycleCount += 1;
 				else
-					_cycleCount += 6;
+					_cycleCount += 2;
 				PC = (PC + rel) & 0xFFFF;
 			}
 		}
@@ -859,13 +874,13 @@ package net.johnmercer.nes.system
 		{
 			param1 = readUnsignedByte(PC++);
 			var rel:int = param1;
-			_cycleCount += 6;
+			_cycleCount += 2;
 			if (P & ZERO_FLAG)
 			{
 				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
-					_cycleCount += 3;
+					_cycleCount += 1;
 				else
-					_cycleCount += 6;
+					_cycleCount += 2;
 				PC = (PC + rel) & 0xFFFF;
 			}
 		}
@@ -877,7 +892,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			value = _mem.readUnsignedByte();
 			instrBIT(value);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrBIT_ABS():void
@@ -887,14 +902,14 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = readUnsignedByte(paramWord);
 			instrBIT(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrBIT(value:uint):void
 		{
 			var result:uint = value & A;
 			
-			P &= 0x3D; // Clear Zero, Overflow, and Negative Flag
+			P &= 0x3D;  // Clear Zero, Overflow, and Negative Flag
 			if (result == 0)
 				P |= ZERO_FLAG
 			
@@ -909,13 +924,13 @@ package net.johnmercer.nes.system
 		{
 			param1 = readByte(PC++);
 			var rel:int = param1;
-			_cycleCount += 6;
+			_cycleCount += 2;
 			if (P & NEGATIVE_FLAG)
 			{
 				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
-					_cycleCount += 3;
+					_cycleCount += 1;
 				else
-					_cycleCount += 6;
+					_cycleCount += 2;
 				PC = (PC + rel) & 0xFFFF;
 			}
 		}
@@ -924,13 +939,13 @@ package net.johnmercer.nes.system
 		{
 			param1 = readByte(PC++);
 			var rel:int = param1;
-			_cycleCount += 6;
+			_cycleCount += 2;
 			if ((P & ZERO_FLAG) == 0)
 			{
 				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
-					_cycleCount += 3;
+					_cycleCount += 1;
 				else
-					_cycleCount += 6;
+					_cycleCount += 2;
 				PC = (PC + rel) & 0xFFFF;
 			}
 		}
@@ -939,13 +954,13 @@ package net.johnmercer.nes.system
 		{
 			param1 = readByte(PC++);
 			var rel:int = param1;
-			_cycleCount += 6;
+			_cycleCount += 2;
 			if ((P & NEGATIVE_FLAG) == 0)
 			{
 				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
-					_cycleCount += 3;
+					_cycleCount += 1;
 				else
-					_cycleCount += 6;
+					_cycleCount += 2;
 				PC = (PC + rel) & 0xFFFF;
 			}
 		}
@@ -958,20 +973,20 @@ package net.johnmercer.nes.system
 			PC = readUnsignedWord(0xFFFE);
 			
 			P |= BREAK_FLAG;
-			_cycleCount += 21;
+			_cycleCount += 7;
 		}
 		
 		private function instrBVC_REL():void
 		{
 			param1 = readByte(PC++);
 			var rel:int = param1;
-			_cycleCount += 6;
+			_cycleCount += 2;
 			if ((P & OVERFLOW_FLAG) == 0)
 			{
 				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
-					_cycleCount += 3;
+					_cycleCount += 1;
 				else
-					_cycleCount += 6;
+					_cycleCount += 2;
 				PC = (PC + rel) & 0xFFFF;
 			}
 		}
@@ -980,13 +995,13 @@ package net.johnmercer.nes.system
 		{
 			param1 = readByte(PC++);
 			var rel:int = param1;
-			_cycleCount += 6;
+			_cycleCount += 2;
 			if (P & OVERFLOW_FLAG)
 			{
 				if ((PC & 0xFF00) == ((PC + rel) & 0xFF00))
-					_cycleCount += 3;
+					_cycleCount += 1;
 				else
-					_cycleCount += 6;
+					_cycleCount += 2;
 				PC = (PC + rel) & 0xFFFF;
 			}
 		}
@@ -994,25 +1009,25 @@ package net.johnmercer.nes.system
 		private function instrCLC_IMP():void
 		{
 			P &= ~CARRY_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrCLD_IMP():void
 		{
 			P &= ~DECIMAL_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrCLI_IMP():void
 		{
 			P &= ~IRQ_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrCLV_IMP():void
 		{
 			P &= ~OVERFLOW_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrCMP_IMM():void
@@ -1021,7 +1036,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = param1 & 0xFF;
 			instrCMP(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrCMP_ZPG():void
@@ -1031,7 +1046,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			value = _mem.readUnsignedByte();
 			instrCMP(value);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrCMP_ZPX():void
@@ -1041,7 +1056,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			value = _mem.readUnsignedByte();
 			instrCMP(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrCMP_ABS():void
@@ -1051,7 +1066,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = readUnsignedByte(paramWord);
 			instrCMP(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrCMP_ABX():void
@@ -1063,9 +1078,9 @@ package net.johnmercer.nes.system
 			instrCMP(value);
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + X) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrCMP_ABY():void
@@ -1077,9 +1092,9 @@ package net.johnmercer.nes.system
 			instrCMP(value);
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + Y) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrCMP_INX():void
@@ -1087,18 +1102,18 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF) // Page boundary
+			value = (param1 + X) & 0xFF;  // Pointer to address
+			if (value == 0xFF)  // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
-				value = _mem.readUnsignedShort(); // address
+				value = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(value);
 			instrCMP(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrCMP_INY():void
@@ -1119,9 +1134,9 @@ package net.johnmercer.nes.system
 			instrCMP(value);
 			// Check for page boundary cross
 			if ((addr & 0xFF00) == ((addr + Y) & 0xFF00))
-				_cycleCount += 15;
+				_cycleCount += 5;
 			else
-				_cycleCount += 18;
+				_cycleCount += 6;
 		}
 		
 		private function instrCMP(value:uint):void
@@ -1144,7 +1159,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = param1 & 0xFF;
 			instrCPX(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrCPX_ZPG():void
@@ -1154,7 +1169,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			value = _mem.readUnsignedByte();
 			instrCPX(value);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrCPX_ABS():void
@@ -1164,7 +1179,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = readUnsignedByte(paramWord);
 			instrCPX(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrCPX(value:uint):void
@@ -1187,7 +1202,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = param1 & 0xFF;
 			instrCPY(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrCPY_ZPG():void
@@ -1197,7 +1212,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			value = _mem.readUnsignedByte();
 			instrCPY(value);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrCPY_ABS():void
@@ -1207,7 +1222,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = readUnsignedByte(paramWord);
 			instrCPY(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrCPY(value:uint):void
@@ -1233,7 +1248,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			_mem.writeByte(value);
 			instrDEC(value);
-			_cycleCount += 15;
+			_cycleCount += 5;
 		}
 		
 		private function instrDEC_ZPX():void
@@ -1245,7 +1260,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			_mem.writeByte(value);
 			instrDEC(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrDEC_ABS():void
@@ -1256,7 +1271,7 @@ package net.johnmercer.nes.system
 			value = (readUnsignedByte(paramWord) - 1) & 0xFF;
 			writeByte(paramWord, value);
 			instrDEC(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrDEC_ABX():void
@@ -1267,7 +1282,7 @@ package net.johnmercer.nes.system
 			value = (readUnsignedByte((paramWord + X) & 0xFFFF) - 1) & 0xFF;
 			writeByte((paramWord + X) & 0xFFFF, value);
 			instrDEC(value);
-			_cycleCount += 21;
+			_cycleCount += 7;
 		}
 		
 		private function instrDEC(value:uint):void
@@ -1293,7 +1308,7 @@ package net.johnmercer.nes.system
 			if (X & 0x80)
 				P |= NEGATIVE_FLAG;
 			
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrDEY_IMP():void
@@ -1308,7 +1323,7 @@ package net.johnmercer.nes.system
 			if (Y & 0x80)
 				P |= NEGATIVE_FLAG;
 			
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrEOR_IMM():void
@@ -1317,7 +1332,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = param1 & 0xFF;
 			instrEOR(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrEOR_ZPG():void
@@ -1327,7 +1342,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			value = _mem.readUnsignedByte();
 			instrEOR(value);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrEOR_ZPX():void
@@ -1337,7 +1352,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			value = _mem.readUnsignedByte();
 			instrEOR(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrEOR_ABS():void
@@ -1347,7 +1362,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = readUnsignedByte(paramWord);
 			instrEOR(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrEOR_ABX():void
@@ -1359,9 +1374,9 @@ package net.johnmercer.nes.system
 			instrEOR(value);
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + X) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		
 		}
 		
@@ -1374,9 +1389,9 @@ package net.johnmercer.nes.system
 			instrEOR(value);
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + Y) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrEOR_INX():void
@@ -1384,18 +1399,18 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF) // Page boundary
+			value = (param1 + X) & 0xFF;  // Pointer to address
+			if (value == 0xFF)  // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
-				value = _mem.readUnsignedShort(); // address
+				value = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(value);
 			instrEOR(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrEOR_INY():void
@@ -1416,9 +1431,9 @@ package net.johnmercer.nes.system
 			instrEOR(value);
 			// Check for page boundary cross
 			if ((addr & 0xFF00) == ((addr + Y) & 0xFF00))
-				_cycleCount += 15;
+				_cycleCount += 5;
 			else
-				_cycleCount += 18;
+				_cycleCount += 6;
 		}
 		
 		private function instrEOR(value:uint):void
@@ -1440,7 +1455,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			_mem.writeByte(value);
 			instrINC(value);
-			_cycleCount += 15;
+			_cycleCount += 5;
 		}
 		
 		private function instrINC_ZPX():void
@@ -1452,7 +1467,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			_mem.writeByte(value);
 			instrINC(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrINC_ABS():void
@@ -1463,7 +1478,7 @@ package net.johnmercer.nes.system
 			value = (readUnsignedByte(paramWord) + 1) & 0xFF;
 			writeByte(paramWord, value);
 			instrINC(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrINC_ABX():void
@@ -1474,7 +1489,7 @@ package net.johnmercer.nes.system
 			value = (readUnsignedByte((paramWord + X) & 0xFFFF) + 1) & 0xFF;
 			writeByte((paramWord + X) & 0xFFFF, value);
 			instrINC(value);
-			_cycleCount += 21;
+			_cycleCount += 7;
 		}
 		
 		private function instrINC(value:uint):void
@@ -1501,7 +1516,7 @@ package net.johnmercer.nes.system
 			if (X & 0x80)
 				P |= NEGATIVE_FLAG;
 			
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrINY_IMP():void
@@ -1516,7 +1531,7 @@ package net.johnmercer.nes.system
 			if (Y & 0x80)
 				P |= NEGATIVE_FLAG;
 			
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrJMP_ABS():void
@@ -1524,7 +1539,7 @@ package net.johnmercer.nes.system
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
 			PC = paramWord;
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrJMP_IND():void
@@ -1534,24 +1549,24 @@ package net.johnmercer.nes.system
 			if (paramWord & 0xFF == 0xFF)
 			{
 				PC = readUnsignedByte(paramWord);
-				paramWord &= 0xFF00; // +1, -100
+				paramWord &= 0xFF00;  // +1, -100
 				PC |= readUnsignedByte(paramWord) << 8;
 			}
 			else
 			{
 				PC = readUnsignedWord(paramWord);
 			}
-			_cycleCount += 15;
+			_cycleCount += 5;
 		}
 		
 		private function instrJSR_ABS():void
 		{
 			paramWord = readUnsignedWord(PC);
-			PC++; // JSR saves PC - 1 to stack, no need to +2 then -1
+			PC++;  // JSR saves PC - 1 to stack, no need to +2 then -1
 			pushStack((PC & 0xFF00) >> 8);
 			pushStack(PC & 0xFF);
 			PC = paramWord;
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrLDA_IMM():void
@@ -1559,7 +1574,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			A = param1 & 0xFF;
 			instrLDA();
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrLDA_ZPG():void
@@ -1568,7 +1583,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			A = _mem.readUnsignedByte();
 			instrLDA();
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrLDA_ZPX():void
@@ -1577,7 +1592,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			A = _mem.readUnsignedByte();
 			instrLDA();
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrLDA_ABS():void
@@ -1586,7 +1601,7 @@ package net.johnmercer.nes.system
 			PC += 2;
 			A = readUnsignedByte(paramWord);
 			instrLDA();
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrLDA_ABX():void
@@ -1597,9 +1612,9 @@ package net.johnmercer.nes.system
 			instrLDA();
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + X) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrLDA_ABY():void
@@ -1610,9 +1625,9 @@ package net.johnmercer.nes.system
 			instrLDA();
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + Y) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrLDA_INX():void
@@ -1620,18 +1635,18 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var addr:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF) // Page boundary
+			addr = (param1 + X) & 0xFF;  // Pointer to address
+			if (addr == 0xFF)  // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
-				addr = _mem.readUnsignedShort(); // address
+				addr = _mem.readUnsignedShort();  // address
 			}
 			
 			A = readUnsignedByte(addr);
 			instrLDA();
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrLDA_INY():void
@@ -1651,14 +1666,14 @@ package net.johnmercer.nes.system
 			instrLDA();
 			// Check for page boundary cross
 			if ((addr & 0xFF00) == ((addr - Y) & 0xFF00))
-				_cycleCount += 15;
+				_cycleCount += 5;
 			else
-				_cycleCount += 18;
+				_cycleCount += 6;
 		}
 		
 		private function instrLDA():void
 		{
-			P &= 0x7D; // Clear Zero Flag and Negative Flag
+			P &= 0x7D;  // Clear Zero Flag and Negative Flag
 			
 			if (A == 0)
 				P |= ZERO_FLAG;
@@ -1672,7 +1687,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			X = param1 & 0xFF;
 			instrLDX();
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrLDX_ZPG():void
@@ -1681,7 +1696,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			X = _mem.readUnsignedByte();
 			instrLDX();
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrLDX_ZPY():void
@@ -1690,7 +1705,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + Y) & 0xFF;
 			X = _mem.readUnsignedByte();
 			instrLDX();
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrLDX_ABS():void
@@ -1699,7 +1714,7 @@ package net.johnmercer.nes.system
 			PC += 2;
 			X = readUnsignedByte(paramWord);
 			instrLDX();
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrLDX_ABY():void
@@ -1710,14 +1725,14 @@ package net.johnmercer.nes.system
 			instrLDX();
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + Y) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrLDX():void
 		{
-			P &= 0x7D; // Clear Zero and Negative Flags
+			P &= 0x7D;  // Clear Zero and Negative Flags
 			
 			if (X == 0)
 				P |= ZERO_FLAG;
@@ -1731,7 +1746,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			Y = param1 & 0xFF;
 			instrLDY();
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrLDY_ZPG():void
@@ -1740,7 +1755,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			Y = _mem.readUnsignedByte();
 			instrLDY();
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrLDY_ZPX():void
@@ -1749,7 +1764,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			Y = _mem.readUnsignedByte();
 			instrLDY();
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrLDY_ABS():void
@@ -1758,7 +1773,7 @@ package net.johnmercer.nes.system
 			PC += 2;
 			Y = readUnsignedByte(paramWord);
 			instrLDY();
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrLDY_ABX():void
@@ -1769,14 +1784,14 @@ package net.johnmercer.nes.system
 			instrLDY();
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + X) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrLDY():void
 		{
-			P &= 0x7D; // Clear Zero and Negative Flags
+			P &= 0x7D;  // Clear Zero and Negative Flags
 			
 			if (Y == 0)
 				P |= ZERO_FLAG;
@@ -1793,7 +1808,7 @@ package net.johnmercer.nes.system
 			result = A >> 1;
 			A = result;
 			instrLSR(value, result);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrLSR_ZPG():void
@@ -1807,7 +1822,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			_mem.writeByte(result);
 			instrLSR(value, result);
-			_cycleCount += 15;
+			_cycleCount += 5;
 		}
 		
 		private function instrLSR_ZPX():void
@@ -1821,7 +1836,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			_mem.writeByte(result);
 			instrLSR(value, result);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrLSR_ABS():void
@@ -1834,7 +1849,7 @@ package net.johnmercer.nes.system
 			result = value >> 1;
 			writeByte(paramWord, result);
 			instrLSR(value, result);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrLSR_ABX():void
@@ -1847,7 +1862,7 @@ package net.johnmercer.nes.system
 			result = value >> 1;
 			writeByte((paramWord + X) & 0xFFFF, result);
 			instrLSR(value, result);
-			_cycleCount += 21;
+			_cycleCount += 7;
 		}
 		
 		private function instrLSR(value:uint, result:uint):void
@@ -1866,14 +1881,14 @@ package net.johnmercer.nes.system
 		
 		private function instrNOP_IMP():void
 		{
-			_cycleCount += 6;
+			_cycleCount += 2;
 			return;
 		}
 		
 		private function instrNOP_ZPG():void
 		{
 			param1 = readUnsignedByte(PC++);
-			_cycleCount += 9;
+			_cycleCount += 3;
 			return;
 		}
 		
@@ -1881,21 +1896,21 @@ package net.johnmercer.nes.system
 		{
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
-			_cycleCount += 12;
+			_cycleCount += 4;
 			return;
 		}
 		
 		private function instrNOP_ZPX():void
 		{
 			param1 = readUnsignedByte(PC++);
-			_cycleCount += 12;
+			_cycleCount += 4;
 			return;
 		}
 		
 		private function instrNOP_IMM():void
 		{
 			param1 = readUnsignedByte(PC++);
-			_cycleCount += 6;
+			_cycleCount += 2;
 			return;
 		}
 		
@@ -1905,9 +1920,9 @@ package net.johnmercer.nes.system
 			PC += 2;
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + X) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 			return;
 		}
 		
@@ -1917,7 +1932,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = param1 & 0xFF;
 			instrORA(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrORA_ZPG():void
@@ -1927,7 +1942,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			value = _mem.readUnsignedByte();
 			instrORA(value);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrORA_ZPX():void
@@ -1937,7 +1952,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			value = _mem.readUnsignedByte();
 			instrORA(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrORA_ABS():void
@@ -1947,7 +1962,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = readUnsignedByte(paramWord);
 			instrORA(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrORA_ABX():void
@@ -1959,9 +1974,9 @@ package net.johnmercer.nes.system
 			instrORA(value);
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + X) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrORA_ABY():void
@@ -1973,9 +1988,9 @@ package net.johnmercer.nes.system
 			instrORA(value);
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + Y) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrORA_INX():void
@@ -1983,18 +1998,18 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF) // Page boundary
+			value = (param1 + X) & 0xFF;  // Pointer to address
+			if (value == 0xFF)  // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
-				value = _mem.readUnsignedShort(); // address
+				value = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(value);
 			instrORA(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrORA_INY():void
@@ -2015,9 +2030,9 @@ package net.johnmercer.nes.system
 			instrORA(value);
 			// Check for page boundary cross
 			if ((addr & 0xFF00) == ((addr + Y) & 0xFF00))
-				_cycleCount += 15;
+				_cycleCount += 5;
 			else
-				_cycleCount += 18;
+				_cycleCount += 6;
 		}
 		
 		private function instrORA(value:uint):void
@@ -2033,13 +2048,13 @@ package net.johnmercer.nes.system
 		private function instrPHA_IMP():void
 		{
 			pushStack(A);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrPHP_IMP():void
 		{
-			pushStack(P | BREAK_FLAG); // Break flag is always pushed with a 1			
-			_cycleCount += 9;
+			pushStack(P | BREAK_FLAG);  // Break flag is always pushed with a 1			
+			_cycleCount += 3;
 		}
 		
 		private function instrPLA_IMP():void
@@ -2051,13 +2066,13 @@ package net.johnmercer.nes.system
 				P |= ZERO_FLAG;
 			if (A & 0x80)
 				P |= NEGATIVE_FLAG;
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrPLP_IMP():void
 		{
 			P = (popStack() & ~BREAK_FLAG) | UNUSED_FLAG;
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrROL_ACM():void
@@ -2067,7 +2082,7 @@ package net.johnmercer.nes.system
 			value = (A << 1) | (P & CARRY_FLAG);
 			A = value & 0xFF;
 			instrROL(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrROL_ZPG():void
@@ -2080,7 +2095,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			_mem.writeByte(value & 0xFF);
 			instrROL(value);
-			_cycleCount += 15;
+			_cycleCount += 5;
 		}
 		
 		private function instrROL_ZPX():void
@@ -2093,7 +2108,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			_mem.writeByte(value & 0xFF);
 			instrROL(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrROL_ABS():void
@@ -2105,7 +2120,7 @@ package net.johnmercer.nes.system
 			value = (value << 1) | (P & CARRY_FLAG);
 			writeByte(paramWord, value & 0xFF);
 			instrROL(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrROL_ABX():void
@@ -2117,7 +2132,7 @@ package net.johnmercer.nes.system
 			value = (value << 1) | (P & CARRY_FLAG);
 			writeByte((paramWord + X) & 0xFFFF, value & 0xFF);
 			instrROL(value);
-			_cycleCount += 21;
+			_cycleCount += 7;
 		}
 		
 		private function instrROL(value:uint):void
@@ -2143,7 +2158,7 @@ package net.johnmercer.nes.system
 			result = A >> 1 | ((P & CARRY_FLAG) << 7);
 			A = result;
 			instrROR(value, result);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrROR_ZPG():void
@@ -2157,7 +2172,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			_mem.writeByte(result);
 			instrROR(value, result);
-			_cycleCount += 15;
+			_cycleCount += 5;
 		}
 		
 		private function instrROR_ZPX():void
@@ -2171,7 +2186,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			_mem.writeByte(result);
 			instrROR(value, result);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrROR_ABS():void
@@ -2184,7 +2199,7 @@ package net.johnmercer.nes.system
 			result = value >> 1 | ((P & CARRY_FLAG) << 7);
 			writeByte(paramWord, result);
 			instrROR(value, result);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrROR_ABX():void
@@ -2197,7 +2212,7 @@ package net.johnmercer.nes.system
 			result = value >> 1 | ((P & CARRY_FLAG) << 7);
 			writeByte((paramWord + X) & 0xFFFF, result);
 			instrROR(value, result);
-			_cycleCount += 21;
+			_cycleCount += 7;
 		}
 		
 		private function instrROR(value:uint, result:uint):void
@@ -2218,7 +2233,7 @@ package net.johnmercer.nes.system
 			P = (popStack() & ~BREAK_FLAG) | UNUSED_FLAG;
 			PC = popStack();
 			PC |= popStack() << 8;
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrRTS_IMP():void
@@ -2226,7 +2241,7 @@ package net.johnmercer.nes.system
 			PC = popStack();
 			PC |= (popStack() << 8);
 			PC++;
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrSBC_IMM():void
@@ -2235,7 +2250,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = param1 & 0xFF;
 			instrSBC(value);
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrSBC_ZPG():void
@@ -2245,7 +2260,7 @@ package net.johnmercer.nes.system
 			_mem.position = param1;
 			value = _mem.readUnsignedByte();
 			instrSBC(value);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrSBC_ZPX():void
@@ -2255,7 +2270,7 @@ package net.johnmercer.nes.system
 			_mem.position = (param1 + X) & 0xFF;
 			value = _mem.readUnsignedByte();
 			instrSBC(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrSBC_ABS():void
@@ -2265,7 +2280,7 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			value = readUnsignedByte(paramWord);
 			instrSBC(value);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrSBC_ABX():void
@@ -2277,9 +2292,9 @@ package net.johnmercer.nes.system
 			instrSBC(value);
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + X) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrSBC_ABY():void
@@ -2291,9 +2306,9 @@ package net.johnmercer.nes.system
 			instrSBC(value);
 			// Check for page boundary cross
 			if ((paramWord & 0xFF00) == ((paramWord + Y) & 0xFF00))
-				_cycleCount += 12;
+				_cycleCount += 4;
 			else
-				_cycleCount += 15;
+				_cycleCount += 5;
 		}
 		
 		private function instrSBC_INX():void
@@ -2301,18 +2316,18 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			value = (param1 + X) & 0xFF; // Pointer to address
-			if (value == 0xFF) // Page boundary
+			value = (param1 + X) & 0xFF;  // Pointer to address
+			if (value == 0xFF)  // Page boundary
 				value = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = value;
-				value = _mem.readUnsignedShort(); // address
+				value = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(value);
 			instrSBC(value);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrSBC_INY():void
@@ -2333,9 +2348,9 @@ package net.johnmercer.nes.system
 			instrSBC(value);
 			// Check for page boundary cross
 			if ((addr & 0xFF00) == ((addr + Y) & 0xFF00))
-				_cycleCount += 15;
+				_cycleCount += 5;
 			else
-				_cycleCount += 18;
+				_cycleCount += 6;
 		}
 		
 		private function instrSBC(value:uint):void
@@ -2370,19 +2385,19 @@ package net.johnmercer.nes.system
 		private function instrSED_IMP():void
 		{
 			P |= DECIMAL_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrSEC_IMP():void
 		{
 			P |= CARRY_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrSEI_IMP():void
 		{
 			P |= IRQ_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrSTA_ZPG():void
@@ -2390,7 +2405,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			_mem.position = param1;
 			_mem.writeByte(A);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrSTA_ZPX():void
@@ -2398,7 +2413,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			_mem.position = (param1 + X) & 0xFF;
 			_mem.writeByte(A);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrSTA_ABS():void
@@ -2406,7 +2421,7 @@ package net.johnmercer.nes.system
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
 			writeByte(paramWord, A);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrSTA_ABX():void
@@ -2414,7 +2429,7 @@ package net.johnmercer.nes.system
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
 			writeByte((paramWord + X) & 0xFFFF, A);
-			_cycleCount += 15;
+			_cycleCount += 5;
 		}
 		
 		private function instrSTA_ABY():void
@@ -2422,7 +2437,7 @@ package net.johnmercer.nes.system
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
 			writeByte((paramWord + Y) & 0xFFFF, A);
-			_cycleCount += 15;
+			_cycleCount += 5;
 		}
 		
 		private function instrSTA_INX():void
@@ -2430,7 +2445,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var addr:uint = 0;
 			addr = (param1 + X) & 0xFF;
-			if (addr == 0xFF) // Page Boundary
+			if (addr == 0xFF)  // Page Boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
@@ -2438,14 +2453,14 @@ package net.johnmercer.nes.system
 				addr = _mem.readUnsignedShort();
 			}
 			writeByte(addr, A);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrSTA_INY():void
 		{
 			param1 = readUnsignedByte(PC++);
 			var addr:uint = 0;
-			if (param1 == 0xFF) // Page Boundary
+			if (param1 == 0xFF)  // Page Boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
@@ -2454,7 +2469,7 @@ package net.johnmercer.nes.system
 			}
 			addr = (addr + Y) & 0xFFFF;
 			writeByte(addr, A);
-			_cycleCount += 18;
+			_cycleCount += 6;
 		}
 		
 		private function instrSTX_ZPG():void
@@ -2462,7 +2477,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			_mem.position = param1;
 			_mem.writeByte(X);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrSTX_ZPY():void
@@ -2470,7 +2485,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			_mem.position = (param1 + Y) & 0xFF;
 			_mem.writeByte(X);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrSTX_ABS():void
@@ -2478,7 +2493,7 @@ package net.johnmercer.nes.system
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
 			writeByte(paramWord, X);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrSTY_ZPG():void
@@ -2486,7 +2501,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			_mem.position = param1;
 			_mem.writeByte(Y);
-			_cycleCount += 9;
+			_cycleCount += 3;
 		}
 		
 		private function instrSTY_ZPX():void
@@ -2494,7 +2509,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			_mem.position = (param1 + X) & 0xFF;
 			_mem.writeByte(Y);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrSTY_ABS():void
@@ -2502,7 +2517,7 @@ package net.johnmercer.nes.system
 			paramWord = readUnsignedWord(PC);
 			PC += 2;
 			writeByte(paramWord, Y);
-			_cycleCount += 12;
+			_cycleCount += 4;
 		}
 		
 		private function instrTAX_IMP():void
@@ -2516,7 +2531,7 @@ package net.johnmercer.nes.system
 			
 			if (X & 0x80)
 				P |= NEGATIVE_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrTAY_IMP():void
@@ -2530,7 +2545,7 @@ package net.johnmercer.nes.system
 			
 			if (Y & 0x80)
 				P |= NEGATIVE_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrTSX_IMP():void
@@ -2544,7 +2559,7 @@ package net.johnmercer.nes.system
 			
 			if (X & 0x80)
 				P |= NEGATIVE_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrTXA_IMP():void
@@ -2558,13 +2573,13 @@ package net.johnmercer.nes.system
 			
 			if (A & 0x80)
 				P |= NEGATIVE_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrTXS_IMP():void
 		{
 			SP = X;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrTYA_IMP():void
@@ -2578,7 +2593,7 @@ package net.johnmercer.nes.system
 			
 			if (A & 0x80)
 				P |= NEGATIVE_FLAG;
-			_cycleCount += 6;
+			_cycleCount += 2;
 		}
 		
 		private function instrXXX_XXX():void
@@ -2686,13 +2701,13 @@ package net.johnmercer.nes.system
 			var addr:uint = 0;
 			var value:int = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF) // Page boundary
+			addr = (param1 + X) & 0xFF;  // Pointer to address
+			if (addr == 0xFF)  // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
-				addr = _mem.readUnsignedShort(); // address
+				addr = _mem.readUnsignedShort();  // address
 			}
 			
 			value = (readByte(addr) - 1);
@@ -2792,13 +2807,13 @@ package net.johnmercer.nes.system
 			var addr:uint = 0;
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF) // Page boundary
+			addr = (param1 + X) & 0xFF;  // Pointer to address
+			if (addr == 0xFF)  // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
-				addr = _mem.readUnsignedShort(); // address
+				addr = _mem.readUnsignedShort();  // address
 			}
 			
 			value = (readByte(addr) + 1) & 0xFF;
@@ -2901,13 +2916,13 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var addr:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF) // Page boundary
+			addr = (param1 + X) & 0xFF;  // Pointer to address
+			if (addr == 0xFF)  // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
-				addr = _mem.readUnsignedShort(); // address
+				addr = _mem.readUnsignedShort();  // address
 			}
 			
 			A = readUnsignedByte(addr);
@@ -2933,7 +2948,7 @@ package net.johnmercer.nes.system
 		
 		private function instrLAX():void
 		{
-			P &= 0x7D; // Clear Zero Flag and Negative Flag
+			P &= 0x7D;  // Clear Zero Flag and Negative Flag
 			
 			if (A == 0)
 				P |= ZERO_FLAG;
@@ -3015,13 +3030,13 @@ package net.johnmercer.nes.system
 			var addr:uint = 0;
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF) // Page boundary
+			addr = (param1 + X) & 0xFF;  // Pointer to address
+			if (addr == 0xFF)  // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
-				addr = _mem.readUnsignedShort(); // address
+				addr = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(addr);
@@ -3146,13 +3161,13 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			var result:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF) // Page boundary
+			addr = (param1 + X) & 0xFF;  // Pointer to address
+			if (addr == 0xFF)  // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
-				addr = _mem.readUnsignedShort(); // address
+				addr = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(addr);
@@ -3241,7 +3256,7 @@ package net.johnmercer.nes.system
 			param1 = readUnsignedByte(PC++);
 			var addr:uint;
 			addr = (param1 + X) & 0xFF;
-			if (addr == 0xFF) // Page Boundary
+			if (addr == 0xFF)  // Page Boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
@@ -3355,13 +3370,13 @@ package net.johnmercer.nes.system
 			var addr:uint = 0;
 			var value:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF) // Page boundary
+			addr = (param1 + X) & 0xFF;  // Pointer to address
+			if (addr == 0xFF)  // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
-				addr = _mem.readUnsignedShort(); // address
+				addr = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(addr) << 1;
@@ -3481,13 +3496,13 @@ package net.johnmercer.nes.system
 			var value:uint = 0;
 			var result:uint = 0;
 			// Address to read value from is at (param1 + X) & 0xFF
-			addr = (param1 + X) & 0xFF; // Pointer to address
-			if (addr == 0xFF) // Page boundary
+			addr = (param1 + X) & 0xFF;  // Pointer to address
+			if (addr == 0xFF)  // Page boundary
 				addr = readUnsignedByte(0xFF) | (readUnsignedByte(0) << 8);
 			else
 			{
 				_mem.position = addr;
-				addr = _mem.readUnsignedShort(); // address
+				addr = _mem.readUnsignedShort();  // address
 			}
 			
 			value = readUnsignedByte(addr);

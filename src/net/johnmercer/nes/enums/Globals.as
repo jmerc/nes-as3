@@ -6,7 +6,7 @@ package net.johnmercer.nes.enums
 	 */
 	public class Globals 
 	{
-		public static const MODE:String = NESTEST;
+		public static const MODE:String = INSTRTESTV4;
 		
 		public static const NESTEST:String = "nestest";
 		public static const INSTRTESTV4:String = "instrtestv4";

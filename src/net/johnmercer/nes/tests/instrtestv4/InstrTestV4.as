@@ -1,15 +1,11 @@
 package net.johnmercer.nes.tests.instrtestv4
 {
-	import flash.events.Event;
-	import flash.utils.ByteArray;
-	import flash.utils.Dictionary;
-	import flash.utils.getTimer;
-	import net.johnmercer.nes.system.CPU;
-	import net.johnmercer.nes.system.Mapper;
-	import net.johnmercer.nes.system.ROM;
-	import net.johnmercer.nes.tests.CPUState;
-	import net.johnmercer.nes.views.Emulator;
-	import net.johnmercer.nes.tests.interfaces.ITest;
+	import flash.events.*;
+	import flash.utils.*;
+	import net.johnmercer.nes.system.*;
+	import net.johnmercer.nes.tests.*;
+	import net.johnmercer.nes.tests.interfaces.*;
+	import net.johnmercer.nes.views.*;
 	
 	/**
 	 * ...
@@ -17,7 +13,7 @@ package net.johnmercer.nes.tests.instrtestv4
 	 */
 	public class InstrTestV4 implements ITest
 	{
-		private const START_ADDR:uint = 0x0000;
+		private const START_ADDR:uint = 0xFFFC;  // Reset vector location
 		
 		[Embed(source="all_instrs.nes",mimeType="application/octet-stream")]
 		private static var TestRom:Class;
@@ -35,7 +31,7 @@ package net.johnmercer.nes.tests.instrtestv4
 			_emulator = emulator;
 		}
 		
-		public function startTest(cpu:CPU, rom:ROM, mapper:Mapper):void
+		public function startTest(cpu:CPU, rom:ROM):void
 		{
 			_cpu = cpu;
 			_currentLine = 0;
@@ -47,11 +43,21 @@ package net.johnmercer.nes.tests.instrtestv4
 			{
 				return;
 			}
-			mapper.loadRom(rom);
+			_cpu.mapper = MapperService.getMapper(_emulator, rom);
 			
 			_cpu.start(START_ADDR);
 			
-			_emulator.enableMouseStep();
+			_emulator.addEventListener(MouseEvent.CLICK, onMouseClick);
+		}
+		
+		private function onMouseClick(e:Event):void
+		{
+			_cpu.execute();
+			_cpuState = _cpu.state;
+			
+			_debugStr = _cpuState.toString() + " " + CPU.INST_NAME[_cpuState.opcode] + "_" + CPU.ADDR_NAME[CPU.INST_ADDR_MODE[_cpuState.opcode]];
+			_emulator.log(_debugStr);
+		
 		}
 	
 	}

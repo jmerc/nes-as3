@@ -5,7 +5,8 @@ package net.johnmercer.nes.tests.nestest
 	import flash.utils.Dictionary;
 	import flash.utils.getTimer;
 	import net.johnmercer.nes.system.CPU;
-	import net.johnmercer.nes.system.Mapper;
+	import net.johnmercer.nes.system.Mappers.IMapper;
+	import net.johnmercer.nes.system.MapperService;
 	import net.johnmercer.nes.system.ROM;
 	import net.johnmercer.nes.tests.CPUState;
 	import net.johnmercer.nes.views.Emulator;
@@ -42,7 +43,7 @@ package net.johnmercer.nes.tests.nestest
 			parseLog(_testLog);
 		}
 		
-		public function startTest(cpu:CPU, rom:ROM, mapper:Mapper):void
+		public function startTest(cpu:CPU, rom:ROM):void
 		{
 			_cpu = cpu;
 			_currentLine = 0;
@@ -54,10 +55,11 @@ package net.johnmercer.nes.tests.nestest
 			{
 				return;
 			}
-			mapper.loadRom(rom);
+			
+			_cpu.mapper = MapperService.getMapper(_emulator, rom);
 			
 			_cpu.start(START_ADDR);
-			return;
+			
 			_emulator.addEventListener(Event.ENTER_FRAME, onEnterFrame);
 		}
 

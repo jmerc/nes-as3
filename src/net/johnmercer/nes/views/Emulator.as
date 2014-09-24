@@ -22,7 +22,6 @@ package net.johnmercer.nes.views
 		
 		private var _cpu:CPU;
 		private var _rom:ROM;
-		private var _mapper:Mapper;
 		
 		// UI
 		private var _titleTextField:TextField;
@@ -76,8 +75,7 @@ package net.johnmercer.nes.views
 			
 			// Create system
 			_rom = new ROM(this);
-			_mapper = new Mapper(this);
-			_cpu = new CPU(this, _rom, _mapper);
+			_cpu = new CPU(this);
 
 			addChild(_titleTextField);
 			addChild(_infoTextField);
@@ -137,7 +135,6 @@ package net.johnmercer.nes.views
 		
 		private function onMouseClick(e:Event):void
 		{
-			_cpu.execute();
 		}
 		
 		public function startEmulation():void
@@ -147,11 +144,11 @@ package net.johnmercer.nes.views
 			{
 				case Globals.NESTEST:
 					test = new Nestest(this);
-					test.startTest(_cpu, _rom, _mapper);
+					test.startTest(_cpu, _rom);
 					break;
 				case Globals.INSTRTESTV4:
 					test = new InstrTestV4(this);
-					test.startTest(_cpu, _rom, _mapper);
+					test.startTest(_cpu, _rom);
 					break;
 			}
 		}
