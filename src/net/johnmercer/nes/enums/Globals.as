@@ -10,6 +10,7 @@ package net.johnmercer.nes.enums
 		
 		public static const NESTEST:String = "nestest";
 		public static const INSTRTESTV4:String = "instrtestv4";
+		public static const INSTRTESTV5:String = "instrtestv5";
 		public static const NORMAL:String = "normal";
 		
 		public static const NTSC:uint = 0x00;

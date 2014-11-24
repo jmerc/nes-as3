@@ -371,7 +371,7 @@ package net.johnmercer.nes.system
 			value &= 0xFF;
 			if (addr < 0x1800)  // Internal Ram
 			{
-				addr &= 0xFFFF;
+				addr &= 0x7FF;
 				_mem.position = addr;
 				_mem.writeByte(value);
 			}
@@ -391,7 +391,7 @@ package net.johnmercer.nes.system
 			}
 			else if (addr < 0x8000)  // SRAM (save RAM)
 			{
-				
+				_mapper.writePrgRamByte(addr, value);
 			}
 			else  // PRG Rom
 			{
@@ -404,7 +404,7 @@ package net.johnmercer.nes.system
 			// Determine where we are trying to read
 			if (addr < 0x1800)  // Internal Ram
 			{
-				addr &= 0x0FFF;
+				addr &= 0x7FF;
 				_mem.position = addr;
 				return _mem.readByte();
 			}
@@ -419,7 +419,15 @@ package net.johnmercer.nes.system
 				// Get NES APU/IO Values
 				return 0;
 			}
-			else
+			else if (addr < 0x6000)  // Cartridge Expansion Rom??
+			{
+				return 0;
+			}
+			else if (addr < 0x8000)  // SRAM (save RAM)
+			{
+				return _mapper.readPrgRomByte(addr);
+			}
+			else  // PRG Rom
 			{
 				return _mapper.readPrgRomByte(addr);
 			}
@@ -430,7 +438,7 @@ package net.johnmercer.nes.system
 			// Determine where we are trying to read
 			if (addr < 0x1800)  // Internal Ram
 			{
-				addr &= 0x0FFF;
+				addr &= 0x7FF;
 				_mem.position = addr;
 				return _mem.readUnsignedByte();
 			}
@@ -445,7 +453,15 @@ package net.johnmercer.nes.system
 				// Get NES APU/IO Values
 				return 0;
 			}
-			else
+			else if (addr < 0x6000)  // Cartridge Expansion Rom??
+			{
+				return 0;
+			}
+			else if (addr < 0x8000)  // SRAM (save RAM)
+			{
+				return _mapper.readPrgRomUnsignedByte(addr);
+			}
+			else  // PRG Rom
 			{
 				return _mapper.readPrgRomUnsignedByte(addr);
 			}
@@ -456,7 +472,7 @@ package net.johnmercer.nes.system
 			// Determine where we are trying to read
 			if (addr < 0x1800)  // Internal Ram
 			{
-				addr &= 0x0FFF;
+				addr &= 0x7FF;
 				_mem.position = addr;
 				return _mem.readShort();
 			}
@@ -471,7 +487,15 @@ package net.johnmercer.nes.system
 				// Get NES APU/IO Values
 				return 0;
 			}
-			else
+			else if (addr < 0x6000)  // Cartridge Expansion Rom??
+			{
+				return 0;
+			}
+			else if (addr < 0x8000)  // SRAM (save RAM)
+			{
+				return _mapper.readPrgRomWord(addr);
+			}
+			else  // PRG Rom
 			{
 				return _mapper.readPrgRomWord(addr);
 			}
@@ -482,7 +506,7 @@ package net.johnmercer.nes.system
 			// Determine where we are trying to read
 			if (addr < 0x1800)  // Internal Ram
 			{
-				addr &= 0x0FFF;
+				addr &= 0x7FF;
 				_mem.position = addr;
 				return _mem.readUnsignedShort();
 			}
@@ -497,7 +521,15 @@ package net.johnmercer.nes.system
 				// Get NES APU/IO Values
 				return 0;
 			}
-			else
+			else if (addr < 0x6000)  // Cartridge Expansion Rom??
+			{
+				return 0;
+			}
+			else if (addr < 0x8000)  // SRAM (save RAM)
+			{
+				return _mapper.readPrgRomUnsignedWord(addr);
+			}
+			else  // PRG Rom
 			{
 				return _mapper.readPrgRomUnsignedWord(addr);
 			}

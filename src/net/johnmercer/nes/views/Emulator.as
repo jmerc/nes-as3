@@ -5,12 +5,12 @@ package net.johnmercer.nes.views
 	import flash.net.*;
 	import flash.text.*;
 	import flash.utils.*;
-	import net.johnmercer.nes.enums.Globals;
+	import net.johnmercer.nes.enums.*;
 	import net.johnmercer.nes.system.*;
-	import net.johnmercer.nes.tests.instrtestv4.InstrTestV4;
-	import net.johnmercer.nes.tests.interfaces.ITest;
-	import net.johnmercer.nes.tests.nestest.Nestest;
-	import net.johnmercer.nes.tests.nestest.Nestest;
+	import net.johnmercer.nes.tests.instrtestv4.*;
+	import net.johnmercer.nes.tests.instrtestv5.*;
+	import net.johnmercer.nes.tests.interfaces.*;
+	import net.johnmercer.nes.tests.nestest.*;
 	
 	/**
 	 * ...
@@ -148,6 +148,10 @@ package net.johnmercer.nes.views
 					break;
 				case Globals.INSTRTESTV4:
 					test = new InstrTestV4(this);
+					test.startTest(_cpu, _rom);
+					break;
+				case Globals.INSTRTESTV5:
+					test = new InstrTestV5(this);
 					test.startTest(_cpu, _rom);
 					break;
 			}

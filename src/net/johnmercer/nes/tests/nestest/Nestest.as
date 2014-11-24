@@ -78,7 +78,10 @@ package net.johnmercer.nes.tests.nestest
 				_cpu.execute();
 				_cpuState = _cpu.state;
 				
-				_debugStr = _cpuState.toString();
+				_debugStr = _cpuState.toString() + " " + CPU.INST_NAME[_cpuState.opcode] + "_" + CPU.ADDR_NAME[CPU.INST_ADDR_MODE[_cpuState.opcode]];
+				
+				// Output debug string
+				_emulator.log(_debugStr);
 				
 				if (_cpu.state.error == true)
 				{
@@ -88,8 +91,6 @@ package net.johnmercer.nes.tests.nestest
 				// Compare state with log file
 				_logState = _logArray[_currentLine];
 				
-				// Output debug string
-				_emulator.log(_debugStr);
 				
 				if (_cpuState.address != _logState.address ||
 				    _cpuState.opcode != _logState.opcode ||
