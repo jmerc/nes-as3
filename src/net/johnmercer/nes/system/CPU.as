@@ -14,14 +14,14 @@ package net.johnmercer.nes.system
 	public class CPU
 	{
 		// Processor Status Flags
-		private static const CARRY_FLAG:uint    = 0x01;
-		private static const ZERO_FLAG:uint     = 0x02;
-		private static const IRQ_FLAG:uint      = 0x04;
-		private static const DECIMAL_FLAG:uint  = 0x08;  // Unused
-		private static const BREAK_FLAG:uint    = 0x10;
-		private static const UNUSED_FLAG:uint   = 0x20;
-		private static const OVERFLOW_FLAG:uint = 0x40;
-		private static const NEGATIVE_FLAG:uint = 0x80;
+		public static const CARRY_FLAG:uint    = 0x01;
+		public static const ZERO_FLAG:uint     = 0x02;
+		public static const IRQ_FLAG:uint      = 0x04;
+		public static const DECIMAL_FLAG:uint  = 0x08;  // Unused
+		public static const BREAK_FLAG:uint    = 0x10;
+		public static const UNUSED_FLAG:uint   = 0x20;
+		public static const OVERFLOW_FLAG:uint = 0x40;
+		public static const NEGATIVE_FLAG:uint = 0x80;
 		
 		// Cycle counts by instruction
 		private static var INST_COUNT:Array = [
@@ -152,6 +152,7 @@ package net.johnmercer.nes.system
 		private var param1:int;
 		private var param2:int;
 		private var paramWord:int;
+		private var paramValue:uint;
 		
 		private var _currentState:CPUState;
 		
@@ -214,9 +215,9 @@ package net.johnmercer.nes.system
 		public function start(address:uint):void
 		{
 			PC = readUnsignedWord(address);
-			_cycleCount = 0;
+			_cycleCount = 7;
 			_scanLine = 241;
-			SP = 0xFD;
+			SP = 0xFF;
 			A = X = Y = 0;
 			P = 0x24;
 			
@@ -240,6 +241,13 @@ package net.johnmercer.nes.system
 			// set $000F to $BF
 			_mem.position = 0x000F;
 			_mem.writeByte(0xBF);
+			
+			// Set up stack
+			pushStack(0xFF);
+			pushStack(0xFF);
+			pushStack(0x00);
+			pushStack(0x02);
+			pushStack(0x30);  // SP should be 0xFA now
 		}
 		
 		// TODO: change to cycles
@@ -287,6 +295,9 @@ package net.johnmercer.nes.system
 				{
 					// Two bytes for an unsigned word
 					case ABS: 
+						paramWord = readUnsignedWord(PC);
+						paramValue = readUnsignedByte(paramWord);
+						break;
 					case ABX: 
 					case ABY: 
 					case IND: 
@@ -399,7 +410,7 @@ package net.johnmercer.nes.system
 			}
 		}
 		
-		private function readByte(addr:uint):int
+		public function readByte(addr:uint):int
 		{
 			// Determine where we are trying to read
 			if (addr < 0x1800)  // Internal Ram
@@ -874,7 +885,7 @@ package net.johnmercer.nes.system
 		
 		private function instrBCC_REL():void
 		{
-			param1 = readUnsignedByte(PC++);
+			param1 = readByte(PC++);
 			var rel:int = param1;
 			_cycleCount += 2;
 			if ((P & CARRY_FLAG) == 0)
@@ -889,7 +900,7 @@ package net.johnmercer.nes.system
 		
 		private function instrBCS_REL():void
 		{
-			param1 = readUnsignedByte(PC++);
+			param1 = readByte(PC++);
 			var rel:int = param1;
 			_cycleCount += 2;
 			if (P & CARRY_FLAG)
@@ -904,7 +915,7 @@ package net.johnmercer.nes.system
 		
 		private function instrBEQ_REL():void
 		{
-			param1 = readUnsignedByte(PC++);
+			param1 = readByte(PC++);
 			var rel:int = param1;
 			_cycleCount += 2;
 			if (P & ZERO_FLAG)
