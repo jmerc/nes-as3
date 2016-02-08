@@ -71,7 +71,7 @@ package tests.nestest
 			{
 				linePassed = true;
 				var cycles:uint = _nes.cpu.emulate();
-				_cpuState = _nes.cpu.cpuState;
+				//_cpuState = _nes.cpu.cpuState;
 				
 				if (_cpuState.error == true)
 				{

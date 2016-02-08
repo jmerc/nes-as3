@@ -77,7 +77,7 @@ package system.Mappers
 			}
 		}
 
-		public function load(address:uint):uint
+		public function load(address:uint, cpumem:Vector.<uint>):uint
 		{
 			// Wrap around:
 			address &= 0xFFFF;
@@ -85,16 +85,15 @@ package system.Mappers
 			// Check address range:
 			if (address > 0x4017) {
 				// ROM:
-				var value:uint = this.nes.cpu.mem[address];
-				return value;
+				return cpumem[address];
 			}
 			else if (address >= 0x2000) {
 				// I/O Ports.
-				return this.regLoad(address);
+				return regLoad(address);
 			}
 			else {
 				// RAM (mirrored)
-				return this.nes.cpu.mem[address & 0x7FF];
+				return cpumem[address & 0x7FF];
 			}
 		}
 

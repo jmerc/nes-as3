@@ -448,6 +448,22 @@ package system
 			
 		}
 		
+		private var _prevBgColor:int = -1;
+		private var _bgArr:Vector.<uint>;
+		
+		private function getBgArr(bgColor:uint):Vector.<uint>
+		{
+			if (_prevBgColor == bgColor) { return _bgArr; }
+			
+			_bgArr = new Vector.<uint>(256 * 240);
+			
+			for (var i:uint=0; i<256*240; i++) {
+				_bgArr[i] = bgColor;
+			}
+			_prevBgColor = bgColor;
+			return _bgArr;
+		}
+		
 		public function startFrame():void
 		{
 			// Set background color:
@@ -490,10 +506,13 @@ package system
 			}
 			
 			var i:uint;
+			buffer = getBgArr(bgColor).concat();
+			/*
 			for (i=0; i<256*240; i++) {
 				buffer[i] = bgColor;
 			}
-
+			*/
+			
 			for (i=0; i<pixRendered.length; i++) {
 				pixRendered[i]=65;
 			}

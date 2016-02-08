@@ -49,13 +49,13 @@ package system
 		private var irqRequested:Boolean;
 		private var irqType:uint;
 		
-		public var cpuState:CPUState;
+		//public var cpuState:CPUState;
 		
 		public var mem:Vector.<uint>;
 		
 		public function CPU(nes:NES) 
 		{
-			cpuState = new CPUState();
+			//cpuState = new CPUState();
 			this.nes = nes;
 			reset();
 		}
@@ -167,7 +167,7 @@ package system
 				irqRequested = false;
 			}
 
-			var opCode:uint = nes.mmap.load(reg_pc + 1);
+			var opCode:uint = nes.mmap.load(reg_pc + 1, mem);
 			var opinf:uint = opdata[opCode];
 			var cycleCount:uint = (opinf>>24);
 			var cycleAdd:uint = 0;
@@ -180,7 +180,7 @@ package system
 			var opaddr:uint = reg_pc;
 			reg_pc += ((opinf >> 16) & 0xFF);
 			
-			
+			/*
 			cpuState.address = opaddr + 1;
 			cpuState.opcode = opCode;
 			cpuState.param1 = int.MAX_VALUE;
@@ -190,6 +190,7 @@ package system
 			cpuState.X = reg_x;
 			cpuState.Y = reg_y;
 			cpuState.SP = reg_sp & 0xFF;
+			*/
 			
 			var addr:uint = 0;
 			var addrHi:uint = 0;
@@ -200,13 +201,13 @@ package system
 					// Zero Page mode. Use the address given after the opcode, 
 					// but without high byte.
 					addr = load(opaddr + 2);
-					cpuState.param1 = addr;
+					//cpuState.param1 = addr;
 					break;
 
 				}case 1:{
 					// Relative mode.
 					addr = load(opaddr+2);
-					cpuState.param1 = addr;
+					//cpuState.param1 = addr;
 					if(addr<0x80){
 						addr += reg_pc;
 					}else{
@@ -220,8 +221,8 @@ package system
 					// Absolute mode. Use the two bytes following the opcode as 
 					// an address.
 					addr = load16bit(opaddr + 2);
-					cpuState.param1 = addr & 0xFF;
-					cpuState.param2 = (addr >> 8) & 0xFF;
+					//cpuState.param1 = addr & 0xFF;
+					//cpuState.param2 = (addr >> 8) & 0xFF;
 					break;
 				}case 4:{
 					// Accumulator mode. The address is in the accumulator 
@@ -231,14 +232,14 @@ package system
 				}case 5:{
 					// Immediate mode. The value is given after the opcode.
 					addr = reg_pc;
-					cpuState.param1 = load(reg_pc);
+					//cpuState.param1 = load(reg_pc);
 					break;
 				}case 6:{
 					// Zero Page Indexed mode, X as index. Use the address given 
 					// after the opcode, then add the
 					// X register to it to get the final address.
 					param1 = load(opaddr + 2);
-					cpuState.param1 = param1;
+					//cpuState.param1 = param1;
 					addr = (param1 + reg_x) & 0xFF;
 					break;
 				}case 7:{
@@ -246,15 +247,15 @@ package system
 					// after the opcode, then add the
 					// Y register to it to get the final address.
 					param1 = load(opaddr + 2);
-					cpuState.param1 = param1;
+					//cpuState.param1 = param1;
 					addr = (param1 + reg_y) & 0xFF;
 					break;
 				}case 8:{
 					// Absolute Indexed Mode, X as index. Same as zero page 
 					// indexed, but with the high byte.
 					addr = load16bit(opaddr + 2);
-					cpuState.param1 = addr & 0xff;
-					cpuState.param2 = (addr >> 8) & 0xff;
+					//cpuState.param1 = addr & 0xff;
+					//cpuState.param2 = (addr >> 8) & 0xff;
 					if((addr&0xFF00)!=((addr+reg_x)&0xFF00)){
 						cycleAdd = 1;
 					}
@@ -264,8 +265,8 @@ package system
 					// Absolute Indexed Mode, Y as index. Same as zero page 
 					// indexed, but with the high byte.
 					addr = load16bit(opaddr+2);
-					cpuState.param1 = addr & 0xff;
-					cpuState.param2 = (addr >> 8) & 0xff;
+					//cpuState.param1 = addr & 0xff;
+					//cpuState.param2 = (addr >> 8) & 0xff;
 					if((addr&0xFF00)!=((addr+reg_y)&0xFF00)){
 						cycleAdd = 1;
 					}
@@ -277,7 +278,7 @@ package system
 					// the current X register. The value is the contents of that 
 					// address.
 					addr = load(opaddr+2);
-					cpuState.param1 = addr & 0xff;
+					//cpuState.param1 = addr & 0xff;
 					if((addr&0xFF00)!=((addr+reg_x)&0xFF00)){
 						cycleAdd = 1;
 					}
@@ -294,7 +295,7 @@ package system
 					// of the Y register. Fetch the value
 					// stored at that adress.
 					addr = load(opaddr + 2);
-					cpuState.param1 = addr;
+					//cpuState.param1 = addr;
 					addrHi = (addr + 1) & 0xFF;
 					addr = load(addr);
 					addr |= load(addrHi) << 8;
@@ -308,14 +309,14 @@ package system
 					// Indirect Absolute mode. Find the 16-bit address contained 
 					// at the given location.
 					addr = load16bit(opaddr + 2);// Find op					
-					cpuState.param1 = addr & 0xff;
-					cpuState.param2 = (addr >> 8) & 0xff;
+					//cpuState.param1 = addr & 0xff;
+					//cpuState.param2 = (addr >> 8) & 0xff;
 
 					if(addr < 0x1FFF) {
 						addr = mem[addr] + (mem[(addr & 0xFF00) | (((addr & 0xFF) + 1) & 0xFF)] << 8);// Read from address given in op
 					}
 					else{
-						addr = nes.mmap.load(addr) + (nes.mmap.load((addr & 0xFF00) | (((addr & 0xFF) + 1) & 0xFF)) << 8);
+						addr = nes.mmap.load(addr, mem) + (nes.mmap.load((addr & 0xFF00) | (((addr & 0xFF) + 1) & 0xFF), mem) << 8);
 					}
 					break;
 
@@ -1121,7 +1122,7 @@ package system
 					// *******
 
 					nes.stop();
-					cpuState.error = true;
+					//cpuState.error = true;
 					nes.crashMessage = "Game crashed, invalid opcode at address $"+opaddr.toString(16);
 					break;
 
@@ -1129,7 +1130,7 @@ package system
 
 			}// end of switch
 			
-			cpuState.CYC = cycleCount;
+			//cpuState.CYC = cycleCount;
 
 			return cycleCount;
 		}
@@ -1140,7 +1141,7 @@ package system
 				return mem[addr & 0x7FF];
 			}
 			else {
-				return nes.mmap.load(addr);
+				return nes.mmap.load(addr, mem);
 			}
 		}
 		
@@ -1151,7 +1152,7 @@ package system
 					| (mem[(addr+1)&0x7FF]<<8);
 			}
 			else {
-				return nes.mmap.load(addr) | (nes.mmap.load(addr+1) << 8);
+				return nes.mmap.load(addr, mem) | (nes.mmap.load(addr+1, mem) << 8);
 			}
 		}
 		
@@ -1193,7 +1194,7 @@ package system
 		{
 			reg_sp++;
 			reg_sp = 0x0100 | (reg_sp&0xFF);
-			return nes.mmap.load(reg_sp);
+			return nes.mmap.load(reg_sp, mem);
 		}
 
 		private function pageCross(addr1:uint, addr2:uint):Boolean
@@ -1209,7 +1210,7 @@ package system
 		private function doNonMaskableInterrupt(status:uint):void
 		{
 			// Check whether VBlank Interrupts are enabled
-			if ((nes.mmap.load(0x2000) & 128) != 0) 
+			if ((nes.mmap.load(0x2000, mem) & 128) != 0) 
 			{ 
 				reg_pc_new++;
 				push((reg_pc_new>>8)&0xFF);
@@ -1217,14 +1218,14 @@ package system
 				//F_INTERRUPT_NEW = 1;
 				push(status);
 
-				reg_pc_new = nes.mmap.load(0xFFFA) | (nes.mmap.load(0xFFFB) << 8);
+				reg_pc_new = nes.mmap.load(0xFFFA, mem) | (nes.mmap.load(0xFFFB, mem) << 8);
 				reg_pc_new--;
 			}
 		}
 		
 		private function doResetInterrupt():void
 		{
-			reg_pc_new = nes.mmap.load(0xFFFC) | (nes.mmap.load(0xFFFD) << 8);
+			reg_pc_new = nes.mmap.load(0xFFFC, mem) | (nes.mmap.load(0xFFFD, mem) << 8);
 			reg_pc_new--;
 		}
 
@@ -1237,7 +1238,7 @@ package system
 			f_interrupt_new = 1;
 			f_brk_new = 0;
 
-			reg_pc_new = nes.mmap.load(0xFFFE) | (nes.mmap.load(0xFFFF) << 8);
+			reg_pc_new = nes.mmap.load(0xFFFE, mem) | (nes.mmap.load(0xFFFF, mem) << 8);
 			reg_pc_new--;
 		}
 
