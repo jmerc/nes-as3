@@ -14,8 +14,8 @@ package system
 		private static const STATUS_VBLANK:uint = 7;
 		
 		private var nes:NES;
-		public var vramMem:Array;
-		private var spriteMem:Array;
+		public var vramMem:Vector.<uint>;
+		private var spriteMem:Vector.<uint>;
 		private var vramAddress:uint;
 		private var vramTmpAddress:uint;
 		private var vramBufferedReadValue:uint;
@@ -57,17 +57,17 @@ package system
 		private var regS:uint;
 		
 		private var curNt:uint;
-		private var attrib:Array;
+		private var attrib:Vector.<uint>;
 		public var buffer:Vector.<uint>;
 		private var bgBuffer:Vector.<uint>;
 		private var pixRendered:Vector.<uint>;
 		
-		private var scantile:Array;
+		private var scantile:Vector.<Tile>;
 		public var scanline:int;
 		private var lastRenderedScanline:int;
 		public var curX:uint;
-		private var sprX:Vector.<uint>;
-		private var sprY:Vector.<uint>;
+		private var sprX:Vector.<int>;
+		private var sprY:Vector.<int>;
 		private var sprTile:Vector.<uint>;
 		private var sprCol:Vector.<uint>;
 		private var vertFlip:Vector.<Boolean>;
@@ -98,8 +98,8 @@ package system
 			var i:uint;
 			
 			// Memory
-			vramMem = new Array(0x8000);
-			spriteMem = new Array(0x100);
+			vramMem = new Vector.<uint>(0x8000);
+			spriteMem = new Vector.<uint>(0x100);
 			for (i = 0; i < vramMem.length; i++)
 			{
 				vramMem[i] = 0;
@@ -164,12 +164,12 @@ package system
 			curNt = 0;
 			
 			// Varibles used when rendering
-			attrib = new Array(32);
+			attrib = new Vector.<uint>(32);
 			buffer = new Vector.<uint>(256 * 240);
 			bgBuffer = new Vector.<uint>(256 * 240);
 			pixRendered = new Vector.<uint>(256 * 240);
 			
-			scantile = new Array(32);
+			scantile = new Vector.<Tile>(32);
 			
 			// Initial misc vars
 			scanline = 0;
@@ -177,8 +177,8 @@ package system
 			curX = 0;
 			
 			// Sprite Data
-			sprX = new Vector.<uint>(64);  // X Coordinate
-			sprY = new Vector.<uint>(64);  // Y Coordinate
+			sprX = new Vector.<int>(64);  // X Coordinate
+			sprY = new Vector.<int>(64);  // Y Coordinate
 			sprTile = new Vector.<uint>(64);  // Tile Index (into pattern table)
 			sprCol = new Vector.<uint>(64);  // Upper Two its of color
 			vertFlip = new Vector.<Boolean>(64);  // Vertical Flip
@@ -995,10 +995,10 @@ package system
 			validTileData = false;
 		}
 		
-		private function renderBgScanline(useBgBuffer:Boolean, scan:uint):void
+		private function renderBgScanline(useBgBuffer:Boolean, scan:int):void
 		{
 			var baseTile:uint = (regS === 0 ? 0 : 256);
-			var destIndex:uint = (scan<<8)-regFH;
+			var destIndex:int = (scan<<8)-regFH;
 
 			curNt = ntable1[cntV+cntV+cntH];
 			
@@ -1011,7 +1011,7 @@ package system
 				var tscanoffset:uint = cntFV<<3;
 				var targetBuffer:Vector.<uint> = useBgBuffer ? bgBuffer : buffer;
 
-				var t:Tile, tpix:Array, att:uint, col:uint;
+				var t:Tile, tpix:Vector.<uint>, att:uint, col:uint;
 
 				for (var tile:uint=0;tile<32;tile++) {
 					
@@ -1033,8 +1033,8 @@ package system
 						}
 						
 						// Render tile scanline:
-						var sx:uint = 0;
-						var x:uint = (tile<<3)-regFH;
+						var sx:int = 0;
+						var x:int = (tile<<3)-regFH;
 
 						if (x>-8) {
 							if (x<0) {
@@ -1202,15 +1202,15 @@ package system
 			}
 		}
 		
-		private function checkSprite0(scan:uint):Boolean
+		private function checkSprite0(scan:int):Boolean
 		{	
 			spr0HitX = -1;
 			spr0HitY = -1;
 			
-			var toffset:uint;
+			var toffset:int;
 			var tIndexAdd:uint= (f_spPatternTable === 0?0:256);
-			var x:uint, y:uint, t:Tile, i:uint;
-			var bufferIndex:uint;
+			var x:int, y:int, t:Tile, i:int;
+			var bufferIndex:int;
 			var col:uint;
 			var bgPri:Boolean;
 			
@@ -1560,15 +1560,15 @@ internal class NameTable
 
 internal class PaletteTable
 {
-	private var curTable:Array;
-	private var emphTable:Array;
+	private var curTable:Vector.<uint>;
+	private var emphTable:Vector.<Vector.<uint>>;
 	private var currentEmph:int;
 	
 	public function PaletteTable()
 	{
-		curTable = new Array(64);
+		curTable = new Vector.<uint>(64);
 	
-		emphTable = new Array(8);
+		emphTable = new Vector.<Vector.<uint>>(8);
 		currentEmph = -1;
 	}
 
@@ -1579,7 +1579,7 @@ internal class PaletteTable
 
 	public function loadNTSCPalette():void
 	{
-		curTable = [0x525252, 0x0000B4, 0x0000A0, 0x3D00B1, 
+		curTable = Vector.<uint>([0x525252, 0x0000B4, 0x0000A0, 0x3D00B1, 
 					0x690074, 0x5B0000, 0x5F0000, 0x401800, 
 					0x102F00, 0x084A08, 0x006700, 0x004212, 
 					0x00286D, 0x000000, 0x000000, 0x000000, 
@@ -1595,14 +1595,14 @@ internal class PaletteTable
 					0xFFB6FF, 0xFFC3FF, 0xFFD1C7, 0xFFDA9A, 
 					0xF8ED88, 0xDDFF83, 0xB8F8B8, 0xACF8F5, 
 					0xB0FFFF, 0xF8D8F8, 0x000000, 0x000000
-					];
+					]);
 		makeTables();
 		setEmphasis(0);
 	}
 	
 	private function loadPALPalette():void
 	{
-		curTable = [0x525252, 0xB40000, 0xA00000, 0xB1003D, 
+		curTable = Vector.<uint>([0x525252, 0xB40000, 0xA00000, 0xB1003D, 
 					0x740069, 0x00005B, 0x00005F, 0x001840, 
 					0x002F10, 0x084A08, 0x006700, 0x124200, 
 					0x6D2800, 0x000000, 0x000000, 0x000000, 
@@ -1618,7 +1618,7 @@ internal class PaletteTable
 					0xFFB6FF, 0xFFC3FF, 0xC7D1FF, 0x9ADAFF, 
 					0x88EDF8, 0x83FFDD, 0xB8F8B8, 0xF5F8AC, 
 					0xFFFFB0, 0xF8D8F8, 0x000000, 0x000000
-					];
+					]);
 		makeTables();
 		setEmphasis(0);
 	}
@@ -1648,7 +1648,7 @@ internal class PaletteTable
 				bFactor = 0.75;
 			}
 			
-			emphTable[emph] = new Array(64);
+			emphTable[emph] = new Vector.<uint>(64);
 			
 			// Calculate table:
 			for (i = 0; i < 64; i++) {

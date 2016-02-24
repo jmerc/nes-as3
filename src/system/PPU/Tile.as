@@ -6,7 +6,7 @@ package system.PPU
 	 */
 	public class Tile 
 	{
-		public var pix:Array;
+		public var pix:Vector.<uint>;
 		private var fbIndex:uint;
 		private var tIndex:uint;
 		private var x:uint;
@@ -19,12 +19,12 @@ package system.PPU
 		private var tpri:uint;
 		private var c:uint;
 		private var initialized:Boolean;
-		public var opaque:Array;
+		public var opaque:Vector.<Boolean>;
 		
 		public function Tile()
 		{
 			// Tile data:
-			pix = new Array(64);
+			pix = new Vector.<uint>(64);
 			
 			fbIndex = 0;
 			tIndex = 0;
@@ -38,7 +38,7 @@ package system.PPU
 			tpri = 0;
 			c = 0;
 			initialized = false;
-			opaque = new Array(8);
+			opaque = new Vector.<Boolean>(8);
 		}
 		
 		private function setBuffer(scanline:uint):void
