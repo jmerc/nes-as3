@@ -8,8 +8,24 @@ package utils
 	{
 		static public function copyArrayElements(src:*, srcPos:uint, dest:*, destPos:uint, length:uint):void
 		{
-			for (var i:uint = 0; i < length; ++i) {
-				dest[destPos + i] = src[srcPos + i];
+			var offset:uint;
+			var terminus:uint;
+			var i:uint;
+			if (srcPos < destPos)
+			{
+				offset = destPos - srcPos;
+				terminus = srcPos + length;
+				for (i = srcPos; i < terminus; ++i) {
+					dest[offset + i] = src[i];
+				}
+			}
+			else
+			{
+				offset = srcPos - destPos;
+				terminus = destPos + length;
+				for (i = destPos; i < terminus; ++i) {
+					dest[i] = src[offset + i];
+				}
 			}
 		}
 

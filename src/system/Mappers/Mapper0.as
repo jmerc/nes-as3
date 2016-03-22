@@ -10,11 +10,11 @@ package system.Mappers
 	 */
 	public class Mapper0 implements IMapper
 	{
-		protected var nes:NES;
+		protected var _nes:NES;
 		
-		private var joy1StrobeState:uint = 0;
-		private var joy2StrobeState:uint = 0;
-		private var joypadLastWrite:uint = 0;
+		private var _joy1StrobeState:uint = 0;
+		private var _joy2StrobeState:uint = 0;
+		private var _joypadLastWrite:uint = 0;
 		
 		private var mousePressed:Boolean = false;
 		private var mouseX:uint = 0;
@@ -22,269 +22,194 @@ package system.Mappers
 		
 		public function Mapper0(nes:NES) 
 		{
-			this.nes = nes;
+			_nes = nes;
+			reset();
 		}
 		
 		public function reset():void
 		{
-			joy1StrobeState = 0;
-			joy2StrobeState = 0;
-			joypadLastWrite = 0;
+			_joy1StrobeState = 0;
+			_joy2StrobeState = 0;
+			_joypadLastWrite = 0;
 			
 			mousePressed = false;
 			mouseX = 0;
 			mouseY = 0;
-		}
-
-		public function write(address:uint, value:uint):void
-		{
-			if (address < 0x2000) {
-				// Mirroring of RAM:
-				this.nes.cpu.mem[address & 0x7FF] = value;
 			
+			_nes.cpu.resetHandlers();
+			registerWriteHandlers();
+			registerLoadHandlers();
+		}
+
+		protected function registerWriteHandlers():void
+		{
+			var addr:uint;
+			
+			// PPU Register Writes (2000-3fff, bitmask 0x2007)
+			var updateControlReg1Handler:int = 	_nes.cpu.registerHandler(_nes.ppu.updateControlReg1);
+			var updateControlReg2Handler:int = 	_nes.cpu.registerHandler(_nes.ppu.updateControlReg2);
+			var sramAddrHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.writeSRAMAddress);
+			var sramWriteHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.sramWrite);
+			var scrollWriteHandler:int = 		_nes.cpu.registerHandler(_nes.ppu.scrollWrite);
+			var vramAddrHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.writeVRAMAddress);
+			var vramWriteHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.vramWrite);
+			
+			for (addr = 0x2000; addr < 0x4000; addr+= 8)
+			{
+				_nes.cpu.writeHandlers[addr + 0] = updateControlReg1Handler;
+				_nes.cpu.writeHandlers[addr + 1] = updateControlReg2Handler;
+				// no write on addr + 2 (todo: put an intercept here to avoid writing to memory?)
+				_nes.cpu.writeHandlers[addr + 3] = sramAddrHandler;
+				_nes.cpu.writeHandlers[addr + 4] = sramWriteHandler;
+				_nes.cpu.writeHandlers[addr + 5] = scrollWriteHandler;
+				_nes.cpu.writeHandlers[addr + 6] = vramAddrHandler;
+				_nes.cpu.writeHandlers[addr + 7] = vramWriteHandler;
 			}
-			else if (address > 0x4017) {
-				this.nes.cpu.mem[address] = value;
-				if (address >= 0x6000 && address < 0x8000) {
-					// Write to SaveRAM. Store in file:
-					// TODO: not yet
-					//if(this.nes.rom!=null)
-					//    this.nes.rom.writeBatteryRam(address,value);
-				}
+			
+			// Direct register writes (4000-4017)
+			var apuWriteHandler:int = _nes.cpu.registerHandler(_nes.apu.writeReg);
+			for (addr = 0x4000; addr <= 0x4013; addr++)
+			{
+				_nes.cpu.writeHandlers[addr] = apuWriteHandler;
 			}
-			else if (address > 0x2007 && address < 0x4000) {
-				this.regWrite(0x2000 + (address & 0x7), value);
-			}
-			else {
-				this.regWrite(address, value);
-			}
+			_nes.cpu.writeHandlers[0x4014] = _nes.cpu.registerHandler(_nes.ppu.sramDMA);
+			_nes.cpu.writeHandlers[0x4015] = apuWriteHandler;
+			_nes.cpu.writeHandlers[0x4016] = _nes.cpu.registerHandler(joyWrite);
+			_nes.cpu.writeHandlers[0x4017] = apuWriteHandler;  // TODO: Break out apu write handlers
 		}
 		
-		private function writelow(address:uint, value:uint):void
+		private function joyWrite(address:uint, value:uint):void
 		{
-			if (address < 0x2000) {
-				// Mirroring of RAM:
-				this.nes.cpu.mem[address & 0x7FF] = value;
+			// Joystick 1 + Strobe
+			if ((value&1) === 0 && (_joypadLastWrite&1) === 1) {
+				_joy1StrobeState = 0;
+				_joy2StrobeState = 0;
 			}
-			else if (address > 0x4017) {
-				this.nes.cpu.mem[address] = value;
-			}
-			else if (address > 0x2007 && address < 0x4000) {
-				this.regWrite(0x2000 + (address & 0x7), value);
-			}
-			else {
-				this.regWrite(address, value);
-			}
+			_joypadLastWrite = value;
 		}
-
-		public function load(address:uint, cpumem:Vector.<uint>):uint
-		{
-			// Wrap around:
-			address &= 0xFFFF;
 		
-			// Check address range:
-			if (address > 0x4017) {
-				// ROM:
-				return cpumem[address];
-			}
-			else if (address >= 0x2000) {
-				// I/O Ports.
-				return regLoad(address);
-			}
-			else {
-				// RAM (mirrored)
-				return cpumem[address & 0x7FF];
-			}
-		}
-
-		private function regLoad(address:uint):uint
+		private function writePPURegister(address:uint, value:uint):void
 		{
-			switch (address >> 12) { // use fourth nibble (0xF000)
-				case 0:
-					break;
-				
-				case 1:
-					break;
-				
-				case 2:
-					// Fall through to case 3
-				case 3:
-					// PPU Registers
-					switch (address & 0x7) {
-						case 0x0:
-							// 0x2000:
-							// PPU Control Register 1.
-							// (the value is stored both
-							// in main memory and in the
-							// PPU as flags):
-							// (not in the real NES)
-							return this.nes.cpu.mem[0x2000];
-						
-						case 0x1:
-							// 0x2001:
-							// PPU Control Register 2.
-							// (the value is stored both
-							// in main memory and in the
-							// PPU as flags):
-							// (not in the real NES)
-							return this.nes.cpu.mem[0x2001];
-						
-						case 0x2:
-							// 0x2002:
-							// PPU Status Register.
-							// The value is stored in
-							// main memory in addition
-							// to as flags in the PPU.
-							// (not in the real NES)
-							return this.nes.ppu.readStatusRegister();
-						
-						case 0x3:
-							return 0;
-						
-						case 0x4:
-							// 0x2004:
-							// Sprite Memory read.
-							return this.nes.ppu.sramLoad();
-						case 0x5:
-							return 0;
-						
-						case 0x6:
-							return 0;
-						
-						case 0x7:
-							// 0x2007:
-							// VRAM read:
-							return this.nes.ppu.vramLoad();
-					}
-					break;
-				case 4:
-					// Sound+Joypad registers
-					switch (address - 0x4015) {
-						case 0:
-							// 0x4015:
-							// Sound channel enable, DMC Status
-							return this.nes.apu.readReg(address);
-						
-						case 1:
-							// 0x4016:
-							// Joystick 1 + Strobe
-							return this.joy1Read();
-						
-						case 2:
-							// 0x4017:
-							// Joystick 2 + Strobe
-							if (this.mousePressed) {
-							
-								// Check for white pixel nearby:
-								var sx:uint = Math.max(0, this.mouseX - 4);
-								var ex:uint = Math.min(256, this.mouseX + 4);
-								var sy:uint = Math.max(0, this.mouseY - 4);
-								var ey:uint = Math.min(240, this.mouseY + 4);
-								var w:uint = 0;
-							
-								for (var y:uint=sy; y<ey; y++) {
-									for (var x:uint=sx; x<ex; x++) {
-								   
-										if (this.nes.ppu.buffer[(y<<8)+x] == 0xFFFFFF) {
-											w |= 0x1<<3;
-											trace("Clicked on white!");
-											break;
-										}
-									}
-								}
-							
-								w |= (this.mousePressed?(0x1<<4):0);
-								return (this.joy2Read()|w) & 0xFFFF;
-							}
-							else {
-								return this.joy2Read();
-							}
-						
-					}
-					break;
-			}
-			return 0;
-		}
-
-		private function regWrite(address:uint, value:uint):void
-		{
-			switch (address) {
+			address = 0x2000 + (address & 0x7);
+			switch (address)
+			{
 				case 0x2000:
 					// PPU Control register 1
-					this.nes.cpu.mem[address] = value;
-					this.nes.ppu.updateControlReg1(value);
+					_nes.ppu.updateControlReg1(address, value);
 					break;
 				
 				case 0x2001:
 					// PPU Control register 2
-					this.nes.cpu.mem[address] = value;
-					this.nes.ppu.updateControlReg2(value);
+					_nes.ppu.updateControlReg2(address, value);
 					break;
 				
 				case 0x2003:
 					// Set Sprite RAM address:
-					this.nes.ppu.writeSRAMAddress(value);
+					_nes.ppu.writeSRAMAddress(address, value);
 					break;
 				
 				case 0x2004:
 					// Write to Sprite RAM:
-					this.nes.ppu.sramWrite(value);
+					_nes.ppu.sramWrite(address, value);
 					break;
 				
 				case 0x2005:
 					// Screen Scroll offsets:
-					this.nes.ppu.scrollWrite(value);
+					_nes.ppu.scrollWrite(address, value);
 					break;
 				
 				case 0x2006:
 					// Set VRAM address:
-					this.nes.ppu.writeVRAMAddress(value);
+					_nes.ppu.writeVRAMAddress(address, value);
 					break;
 				
 				case 0x2007:
 					// Write to VRAM:
-					this.nes.ppu.vramWrite(value);
+					_nes.ppu.vramWrite(address, value);
 					break;
-				
+			}
+		}
+		
+		
+		private function regWrite(address:uint, value:uint):void
+		{
+			switch (address) {
 				case 0x4014:
 					// Sprite Memory DMA Access
-					this.nes.ppu.sramDMA(value);
+					_nes.ppu.sramDMA(0x4014, value);
 					break;
 				
 				case 0x4015:
 					// Sound Channel Switch, DMC Status
-					this.nes.apu.writeReg(address, value);
+					_nes.apu.writeReg(address, value);
 					break;
 				
 				case 0x4016:
 					// Joystick 1 + Strobe
-					if ((value&1) === 0 && (this.joypadLastWrite&1) === 1) {
-						this.joy1StrobeState = 0;
-						this.joy2StrobeState = 0;
+					if ((value&1) === 0 && (_joypadLastWrite&1) === 1) {
+						_joy1StrobeState = 0;
+						_joy2StrobeState = 0;
 					}
-					this.joypadLastWrite = value;
+					_joypadLastWrite = value;
 					break;
 				
 				case 0x4017:
 					// Sound channel frame sequencer:
-					this.nes.apu.writeReg(address, value);
+					_nes.apu.writeReg(address, value);
 					break;
 				
 				default:
 					// Sound registers
 					////System.out.println("write to sound reg");
 					if (address >= 0x4000 && address <= 0x4017) {
-						this.nes.apu.writeReg(address,value);
+						_nes.apu.writeReg(address,value);
 					}
-					
 			}
 		}
 
-		private function joy1Read():uint
+		
+		
+		protected function registerLoadHandlers():void
+		{
+			var addr:uint;
+			
+			var readZeroHandler:int = _nes.cpu.registerHandler(readZero);
+			var readStatusHandler:int = _nes.cpu.registerHandler(_nes.ppu.readStatusRegister);
+			var sramLoadHandler:int = _nes.cpu.registerHandler(_nes.ppu.sramLoad);
+			var vramLoadHandler:int = _nes.cpu.registerHandler(_nes.ppu.vramLoad);
+			
+			// PPU Register Loads (0x2000-0x3FFF, bitmask 0x2007)
+			for (addr = 0x2000; addr < 0x4000; addr += 8)
+			{
+				// addr+0, addr+1 are stored in local cpu memory (not on actual NES)
+				_nes.cpu.loadHandlers[addr + 2] = readStatusHandler;
+				_nes.cpu.loadHandlers[addr + 3] = readZeroHandler;
+				_nes.cpu.loadHandlers[addr + 4] = sramLoadHandler
+				_nes.cpu.loadHandlers[addr + 5] = readZeroHandler;
+				_nes.cpu.loadHandlers[addr + 6] = readZeroHandler;
+				_nes.cpu.loadHandlers[addr + 7] = vramLoadHandler;				
+			}
+				
+			// APU/Misc Registers (0x4000-0x4017)
+			for (addr = 0x4000; addr <= 0x4014; addr++)
+    		{
+				_nes.cpu.loadHandlers[addr] = readZeroHandler;
+			}
+			_nes.cpu.loadHandlers[0x4015] = _nes.cpu.registerHandler(_nes.apu.readReg);
+			_nes.cpu.loadHandlers[0x4016] = _nes.cpu.registerHandler(joy1Read);
+			_nes.cpu.loadHandlers[0x4017] = _nes.cpu.registerHandler(joy2Read);
+		}
+		
+		private function readZero(address:uint):uint
+		{
+			return 0;
+		}
+				
+		private function joy1Read(addr:uint):uint
 		{
 			var ret:uint;
 		
-			switch (this.joy1StrobeState) {
+			switch (_joy1StrobeState) {
 				case 0:
 				case 1:
 				case 2:
@@ -293,7 +218,7 @@ package system.Mappers
 				case 5:
 				case 6:
 				case 7:
-					ret = this.nes.input.state1[this.joy1StrobeState];
+					ret = _nes.input.state1[_joy1StrobeState];
 					break;
 				case 8:
 				case 9:
@@ -315,19 +240,19 @@ package system.Mappers
 					ret = 0;
 			}
 		
-			this.joy1StrobeState++;
-			if (this.joy1StrobeState == 24) {
-				this.joy1StrobeState = 0;
+			_joy1StrobeState++;
+			if (_joy1StrobeState == 24) {
+				_joy1StrobeState = 0;
 			}
 		
 			return ret;
 		}
 
-		private function joy2Read():uint
+		private function joy2Read(addr:uint):uint
 		{
 			var ret:uint;
 		
-			switch (this.joy2StrobeState) {
+			switch (_joy2StrobeState) {
 				case 0:
 				case 1:
 				case 2:
@@ -336,7 +261,7 @@ package system.Mappers
 				case 5:
 				case 6:
 				case 7:
-					ret = this.nes.input.state2[this.joy2StrobeState];
+					ret = _nes.input.state2[_joy2StrobeState];
 					break;
 				case 8:
 				case 9:
@@ -358,9 +283,9 @@ package system.Mappers
 					ret = 0;
 			}
 
-			this.joy2StrobeState++;
-			if (this.joy2StrobeState == 24) {
-				this.joy2StrobeState = 0;
+			_joy2StrobeState++;
+			if (_joy2StrobeState == 24) {
+				_joy2StrobeState = 0;
 			}
 		
 			return ret;
@@ -368,50 +293,50 @@ package system.Mappers
 
 		public function loadROM():void
 		{
-			if (!this.nes.rom.valid || this.nes.rom.romCount < 1) {
-				trace("NoMapper: Invalid ROM! Unable to load.");
+			if (!_nes.rom.valid || _nes.rom.romCount < 1) {
+				//trace("NoMapper: Invalid ROM! Unable to load.");
 				return;
 			}
 		
 			// Load ROM into memory:
-			this.loadPRGROM();
+			loadPRGROM();
 		
 			// Load CHR-ROM:
-			this.loadCHRROM();
+			loadCHRROM();
 		
 			// Load Battery RAM (if present):
-			this.loadBatteryRam();
+			loadBatteryRam();
 		
 			// Reset IRQ:
 			//nes.getCpu().doResetInterrupt();
-			this.nes.cpu.requestIrq(CPU.IRQ_RESET);
+			_nes.cpu.requestIrq(CPU.IRQ_RESET);
 		}
 
 		private function loadPRGROM():void
 		{
-			if (this.nes.rom.romCount > 1) {
+			if (_nes.rom.romCount > 1) {
 				// Load the two first banks into memory.
-				this.loadRomBank(0, 0x8000);
-				this.loadRomBank(1, 0xC000);
+				loadRomBank(0, 0x8000);
+				loadRomBank(1, 0xC000);
 			}
 			else {
 				// Load the one bank into both memory locations:
-				this.loadRomBank(0, 0x8000);
-				this.loadRomBank(0, 0xC000);
+				loadRomBank(0, 0x8000);
+				loadRomBank(0, 0xC000);
 			}
 		}
 
 		protected function loadCHRROM():void
 		{
 			////System.out.println("Loading CHR ROM..");
-			if (this.nes.rom.vromCount > 0) {
-				if (this.nes.rom.vromCount == 1) {
-					this.loadVromBank(0,0x0000);
-					this.loadVromBank(0,0x1000);
+			if (_nes.rom.vromCount > 0) {
+				if (_nes.rom.vromCount == 1) {
+					loadVromBank(0,0x0000);
+					loadVromBank(0,0x1000);
 				}
 				else {
-					this.loadVromBank(0,0x0000);
-					this.loadVromBank(1,0x1000);
+					loadVromBank(0,0x0000);
+					loadVromBank(1,0x1000);
 				}
 			}
 			else {
@@ -433,93 +358,100 @@ package system.Mappers
 
 		protected function loadRomBank(bank:uint, address:uint):void
 		{
+			//trace(this + "loadRomBank: " + bank + " - " + address.toString(16));
 			// Loads a ROM bank into the specified address.
-			bank %= this.nes.rom.romCount;
+			bank %= _nes.rom.romCount;
 			//var data = this.nes.rom.rom[bank];
 			//cpuMem.write(address,data,data.length);
-			ArrayUtils.copyArrayElements(nes.rom.rom[bank], 0, nes.cpu.mem, address, 16384);
+			ArrayUtils.copyArrayElements(_nes.rom.rom[bank], 0, _nes.cpu.mem, address, 16384);
 		}
 
 		protected function loadVromBank(bank:uint, address:uint):void
 		{
-			if (this.nes.rom.vromCount === 0) {
+			//trace(this + "loadVromBank: " + bank + " - " + address.toString(16));
+			if (_nes.rom.vromCount === 0) {
 				return;
 			}
-			this.nes.ppu.triggerRendering();
+			_nes.ppu.triggerRendering();
 		
-			ArrayUtils.copyArrayElements(this.nes.rom.vrom[bank % this.nes.rom.vromCount], 
-				0, this.nes.ppu.vramMem, address, 4096);
+			ArrayUtils.copyArrayElements(_nes.rom.vrom[bank % _nes.rom.vromCount], 
+				0, _nes.ppu.vramMem, address, 4096);
 		
-			var vromTile:Vector.<Tile> = this.nes.rom.vromTile[bank % this.nes.rom.vromCount];
-			ArrayUtils.copyArrayElements(vromTile, 0, this.nes.ppu.ptTile,address >> 4, 256);
+			var vromTile:Vector.<Tile> = _nes.rom.vromTile[bank % _nes.rom.vromCount];
+			ArrayUtils.copyArrayElements(vromTile, 0, _nes.ppu.ptTile,address >> 4, 256);
 		}
 
 		protected function load32kRomBank(bank:uint, address:uint):void
 		{
-			this.loadRomBank((bank*2) % this.nes.rom.romCount, address);
-			this.loadRomBank((bank*2+1) % this.nes.rom.romCount, address+16384);
+			//trace(this + "load32kRomBank: " + bank + " - " + address.toString(16));
+			loadRomBank((bank*2) % _nes.rom.romCount, address);
+			loadRomBank((bank*2+1) % _nes.rom.romCount, address+16384);
 		}
 
 		protected function load8kVromBank(bank4kStart:uint, address:uint):void
 		{
-			if (this.nes.rom.vromCount === 0) {
+			//trace(this + "load8kVromBank: " + bank4kStart + " - " + address.toString(16));
+			if (_nes.rom.vromCount === 0) {
 				return;
 			}
-			this.nes.ppu.triggerRendering();
+			_nes.ppu.triggerRendering();
 
-			this.loadVromBank((bank4kStart) % this.nes.rom.vromCount, address);
-			this.loadVromBank((bank4kStart + 1) % this.nes.rom.vromCount,
+			loadVromBank((bank4kStart) % _nes.rom.vromCount, address);
+			loadVromBank((bank4kStart + 1) % _nes.rom.vromCount,
 					address + 4096);
 		}
 
 		protected function load1kVromBank(bank1k:uint, address:uint):void
 		{
-			if (this.nes.rom.vromCount === 0) {
+			//trace(this + "load1kVromBank: " + bank1k + " - " + address.toString(16));
+			if (_nes.rom.vromCount === 0) {
 				return;
 			}
-			this.nes.ppu.triggerRendering();
+			_nes.ppu.triggerRendering();
 		
-			var bank4k:uint = Math.floor(bank1k / 4) % this.nes.rom.vromCount;
+			var bank4k:uint = Math.floor(bank1k / 4) % _nes.rom.vromCount;
 			var bankoffset:uint = (bank1k % 4) * 1024;
-			ArrayUtils.copyArrayElements(this.nes.rom.vrom[bank4k], 0, 
-				this.nes.ppu.vramMem, bankoffset, 1024);
+			ArrayUtils.copyArrayElements(_nes.rom.vrom[bank4k], 0, 
+				_nes.ppu.vramMem, bankoffset, 1024);
 		
 			// Update tiles:
-			var vromTile:Array = this.nes.rom.vromTile[bank4k];
+			var vromTile:Vector.<Tile> = _nes.rom.vromTile[bank4k];
 			var baseIndex:uint = address >> 4;
 			for (var i:uint = 0; i < 64; i++) {
-				this.nes.ppu.ptTile[baseIndex+i] = vromTile[((bank1k%4) << 6) + i];
+				_nes.ppu.ptTile[baseIndex+i] = vromTile[((bank1k%4) << 6) + i];
 			}
 		}
 
 		private function load2kVromBank(bank2k:uint, address:uint):void
 		{
-			if (this.nes.rom.vromCount === 0) {
+			//trace(this + "load2kVromBank: " + bank2k + " - " + address.toString(16));
+			if (_nes.rom.vromCount === 0) {
 				return;
 			}
-			this.nes.ppu.triggerRendering();
+			_nes.ppu.triggerRendering();
 		
-			var bank4k:uint = Math.floor(bank2k / 2) % this.nes.rom.vromCount;
+			var bank4k:uint = Math.floor(bank2k / 2) % _nes.rom.vromCount;
 			var bankoffset:uint = (bank2k % 2) * 2048;
-			ArrayUtils.copyArrayElements(this.nes.rom.vrom[bank4k], bankoffset,
-				this.nes.ppu.vramMem, address, 2048);
+			ArrayUtils.copyArrayElements(_nes.rom.vrom[bank4k], bankoffset,
+				_nes.ppu.vramMem, address, 2048);
 		
 			// Update tiles:
-			var vromTile:Array = this.nes.rom.vromTile[bank4k];
+			var vromTile:Vector.<Tile> = _nes.rom.vromTile[bank4k];
 			var baseIndex:uint = address >> 4;
 			for (var i:uint = 0; i < 128; i++) {
-				this.nes.ppu.ptTile[baseIndex+i] = vromTile[((bank2k%2) << 7) + i];
+				_nes.ppu.ptTile[baseIndex+i] = vromTile[((bank2k%2) << 7) + i];
 			}
 		}
 
 		protected function load8kRomBank(bank8k:uint, address:uint):void
 		{
-			var bank16k:uint = Math.floor(bank8k / 2) % this.nes.rom.romCount;
+			//trace(this + "load8kRomBank: " + bank8k + " - " + address.toString(16));
+			var bank16k:uint = Math.floor(bank8k / 2) % _nes.rom.romCount;
 			var offset:uint = (bank8k % 2) * 8192;
 		
 			//this.nes.cpu.mem.write(address,this.nes.rom.rom[bank16k],offset,8192);
-			ArrayUtils.copyArrayElements(this.nes.rom.rom[bank16k], offset, 
-					  this.nes.cpu.mem, address, 8192);
+			ArrayUtils.copyArrayElements(_nes.rom.rom[bank16k], offset, 
+					  _nes.cpu.mem, address, 8192);
 		}
 
 		public function clockIrqCounter():void

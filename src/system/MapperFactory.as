@@ -17,6 +17,7 @@ package system
 		
 		static public function createMapper(mapperID:uint, nes:NES):IMapper
 		{
+			trace("MapperFactory.createMapper: " + mapperID);
 			var mapper:Class = SUPPORTED_MAPPERS[mapperID];
 			if (mapper == null) { return null; }
 			return new mapper(nes) as IMapper;

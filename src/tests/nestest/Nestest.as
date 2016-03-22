@@ -69,13 +69,20 @@ package tests.nestest
 			var linePassed:Boolean;
 			while (_currentLine < _testLines && getTimer() < endTime)
 			{
+				if (_currentLine == 5000)
+				{
+					enableDebug = true;
+				}
 				linePassed = true;
 				var cycles:uint = _nes.cpu.emulate();
-				//_cpuState = _nes.cpu.cpuState;
+				_cpuState = _nes.cpu.cpuState;
 				
 				if (_cpuState.error == true)
 				{
-					stopTest("CPU Error at line: " + _currentLine);
+					stopTest("CPU Error at line: " + _currentLine + ":\n" +
+					         "CPU: " + _cpuState.toString() + "\n" +
+					         "LOG: " + _logState.toString());
+					
 					return;
 				}
 				// Compare state with log file

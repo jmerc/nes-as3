@@ -23,41 +23,72 @@ package system
 		
 		private var nes:NES;
 		
-		private var reg_acc:uint;
-		private var reg_x:uint;
-		private var reg_y:uint;
-		private var reg_sp:uint;
-		private var reg_pc:uint;
-		private var reg_pc_new:uint;
-		private var reg_status:uint;
+		private var _reg_acc:uint;
+		private var _reg_x:uint;
+		private var _reg_y:uint;
+		private var _reg_sp:uint;
+		private var _reg_pc:uint;
+		private var _reg_pc_new:uint;
+		private var _reg_status:uint;
 		
-		private var f_carry:uint;
-		private var f_decimal:uint;
-		private var f_interrupt:uint;
-		private var f_interrupt_new:uint;
-		private var f_overflow:uint;
-		private var f_sign:uint;
-		private var f_zero:uint;
-		private var f_notused:uint;
-		private var f_notused_new:uint;
-		private var f_brk:uint;
-		private var f_brk_new:uint;
+		private var _f_carry:uint;
+		private var _f_decimal:uint;
+		private var _f_interrupt:uint;
+		private var _f_interrupt_new:uint;
+		private var _f_overflow:uint;
+		private var _f_sign:uint;
+		private var _f_zero:uint;
+		private var _f_notused:uint;
+		private var _f_notused_new:uint;
+		private var _f_brk:uint;
+		private var _f_brk_new:uint;
 		
-		private var opdata:Vector.<uint>;
+		private var _opdata:Vector.<uint>;
+		private var _instructions:Vector.<Function>;
 		public var cyclesToHalt:uint;
-		private var crash:Boolean
-		private var irqRequested:Boolean;
-		private var irqType:uint;
+		private var _crash:Boolean
+		private var _irqRequested:Boolean;
+		private var _irqType:uint;
 		
-		//public var cpuState:CPUState;
+		public var cpuState:CPUState;
 		
 		public var mem:Vector.<uint>;
+		public var loadHandlers:Vector.<int>;
+		public var writeHandlers:Vector.<int>;
+		private var _handlerJumpTable:Vector.<Function>;
 		
 		public function CPU(nes:NES) 
 		{
-			//cpuState = new CPUState();
+			//cpuState = new //cpuState();
 			this.nes = nes;
 			reset();
+		}
+		
+		public function registerHandler(handler:Function):int
+		{
+			var index:int = _handlerJumpTable.length;
+			_handlerJumpTable[index] = handler;
+			return index;
+		}
+		
+		public function resetHandlers():void
+		{
+			loadHandlers = new Vector.<int>(0x10000);
+			writeHandlers = new Vector.<int>(0x10000);
+			_handlerJumpTable = new <Function>[null];
+		}
+		
+		private function generateInstJumpTable():void
+		{
+			_instructions = new Vector.<Function>();
+			if (OpData.instname == null) { return; }
+			
+			_instructions.length = 0xFF;
+			for (var i:int = 0; i < OpData.instname.length; i++)
+			{
+				_instructions[i] = this["instr" + OpData.instname[i]] as Function;
+			}
+			_instructions[0xFF] = instrXXX;
 		}
 		
 		public function reset(startAddr:uint = 0x8000):void
@@ -86,36 +117,37 @@ package system
 			}
 			
 			// CPU Registers
-			reg_acc = reg_x = reg_y = 0;
+			_reg_acc = _reg_x = _reg_y = 0;
 			// Reset stack pointer
-			reg_sp = 0x01FD;
+			_reg_sp = 0x01FD;
 			// Reset program counter
-			reg_pc = reg_pc_new = startAddr - 1;
+			_reg_pc = _reg_pc_new = startAddr - 1;
 			// Reset status register
-			reg_status = 0x28;
+			_reg_status = 0x28;
 			
 			setStatus(0x28);
 			
 			// Set flags:
-			f_carry = f_decimal = f_overflow = f_sign = 0;
-			f_interrupt = f_interrupt_new = f_zero = 1;
-			f_notused = f_notused_new = f_brk = f_brk_new = 1;
+			_f_carry = _f_decimal = _f_overflow = _f_sign = 0;
+			_f_interrupt = _f_interrupt_new = _f_zero = 1;
+			_f_notused = _f_notused_new = _f_brk = _f_brk_new = 1;
 			
-			opdata = (new OpData()).opdata;
+			_opdata = (new OpData()).opdata;
+			generateInstJumpTable();
 			cyclesToHalt = 0;
 			
 			// Reset crash flag
-			crash = false;
+			_crash = false;
 			
 			// Interrupt Notifcation
-			irqRequested = false;
-			irqType = 0;
+			_irqRequested = false;
+			_irqType = 0;
 		}
 		
 		public function setAddress(addr:uint):void
 		{
-			reg_pc_new = reg_pc = (addr - 1) & 0xFFFF;
-			irqRequested = false;
+			_reg_pc_new = _reg_pc = (addr - 1) & 0xFFFF;
+			_irqRequested = false;
 			
 			setStatus(0x24);
 		}
@@ -126,28 +158,28 @@ package system
 			var add:uint;
 			
 			// Check interrupts:
-			if(irqRequested){
+			if(_irqRequested){
 				temp =
-					(f_carry)|
-					((f_zero===0?1:0)<<1)|
-					(f_interrupt<<2)|
-					(f_decimal<<3)|
+					(_f_carry)|
+					((_f_zero===0?1:0)<<1)|
+					(_f_interrupt<<2)|
+					(_f_decimal<<3)|
 					0|//(f_brk<<4)|  - Brk flag is pushed as 0
-					(f_notused<<5)|
-					(f_overflow<<6)|
-					(f_sign<<7);
+					(_f_notused<<5)|
+					(_f_overflow<<6)|
+					(_f_sign<<7);
 
-				reg_pc_new = reg_pc;
-				f_interrupt_new = f_interrupt;
-				switch(irqType){
+				_reg_pc_new = _reg_pc;
+				_f_interrupt_new = _f_interrupt;
+				switch(_irqType){
 					case 0: {
 						// Normal IRQ:
-						if(f_interrupt!=0){
+						if(_f_interrupt!=0){
 							trace("Interrupt was masked.");
 							break;
 						}
 						doIrq(temp);
-						trace("Did normal IRQ. I="+f_interrupt);
+						trace("Did normal IRQ. I="+_f_interrupt);
 						break;
 					}case 1:{
 						// NMI:
@@ -161,14 +193,14 @@ package system
 					}
 				}
 
-				reg_pc = reg_pc_new;
-				f_interrupt = f_interrupt_new;
-				f_brk = f_brk_new;
-				irqRequested = false;
+				_reg_pc = _reg_pc_new;
+				_f_interrupt = _f_interrupt_new;
+				_f_brk = _f_brk_new;
+				_irqRequested = false;
 			}
 
-			var opCode:uint = nes.mmap.load(reg_pc + 1, mem);
-			var opinf:uint = opdata[opCode];
+			var opCode:uint = load(_reg_pc + 1);
+			var opinf:uint = _opdata[opCode];
 			var cycleCount:uint = (opinf>>24);
 			var cycleAdd:uint = 0;
 			
@@ -177,20 +209,20 @@ package system
 			var addrMode:uint = (opinf >> 8) & 0xFF;
 
 			// Increment PC by number of op bytes:
-			var opaddr:uint = reg_pc;
-			reg_pc += ((opinf >> 16) & 0xFF);
+			var opaddr:uint = _reg_pc;
+			_reg_pc += ((opinf >> 16) & 0xFF);
 			
-			/*
-			cpuState.address = opaddr + 1;
-			cpuState.opcode = opCode;
-			cpuState.param1 = int.MAX_VALUE;
-			cpuState.param2 = int.MAX_VALUE;
-			cpuState.P = getStatus();
-			cpuState.A = reg_acc;
-			cpuState.X = reg_x;
-			cpuState.Y = reg_y;
-			cpuState.SP = reg_sp & 0xFF;
-			*/
+			
+			//cpuState.address = opaddr + 1;
+			//cpuState.opcode = opCode;
+			//cpuState.param1 = int.MAX_VALUE;
+			//cpuState.param2 = int.MAX_VALUE;
+			//cpuState.P = getStatus();
+			//cpuState.A = _reg_acc;
+			//cpuState.X = _reg_x;
+			//cpuState.Y = _reg_y;
+			//cpuState.SP = _reg_sp & 0xFF;
+			
 			
 			var addr:uint = 0;
 			var addrHi:uint = 0;
@@ -209,9 +241,9 @@ package system
 					addr = load(opaddr+2);
 					//cpuState.param1 = addr;
 					if(addr<0x80){
-						addr += reg_pc;
+						addr += _reg_pc;
 					}else{
-						addr += reg_pc-256;
+						addr += _reg_pc-256;
 					}
 					break;
 				}case 2:{
@@ -227,12 +259,12 @@ package system
 				}case 4:{
 					// Accumulator mode. The address is in the accumulator 
 					// register.
-					addr = reg_acc;
+					addr = _reg_acc;
 					break;
 				}case 5:{
 					// Immediate mode. The value is given after the opcode.
-					addr = reg_pc;
-					//cpuState.param1 = load(reg_pc);
+					addr = _reg_pc;
+					//cpuState.param1 = load(_reg_pc);
 					break;
 				}case 6:{
 					// Zero Page Indexed mode, X as index. Use the address given 
@@ -240,7 +272,7 @@ package system
 					// X register to it to get the final address.
 					param1 = load(opaddr + 2);
 					//cpuState.param1 = param1;
-					addr = (param1 + reg_x) & 0xFF;
+					addr = (param1 + _reg_x) & 0xFF;
 					break;
 				}case 7:{
 					// Zero Page Indexed mode, Y as index. Use the address given 
@@ -248,7 +280,7 @@ package system
 					// Y register to it to get the final address.
 					param1 = load(opaddr + 2);
 					//cpuState.param1 = param1;
-					addr = (param1 + reg_y) & 0xFF;
+					addr = (param1 + _reg_y) & 0xFF;
 					break;
 				}case 8:{
 					// Absolute Indexed Mode, X as index. Same as zero page 
@@ -256,10 +288,10 @@ package system
 					addr = load16bit(opaddr + 2);
 					//cpuState.param1 = addr & 0xff;
 					//cpuState.param2 = (addr >> 8) & 0xff;
-					if((addr&0xFF00)!=((addr+reg_x)&0xFF00)){
+					if((addr&0xFF00)!=((addr+_reg_x)&0xFF00)){
 						cycleAdd = 1;
 					}
-					addr+=reg_x;
+					addr+=_reg_x;
 					break;
 				}case 9:{
 					// Absolute Indexed Mode, Y as index. Same as zero page 
@@ -267,10 +299,10 @@ package system
 					addr = load16bit(opaddr+2);
 					//cpuState.param1 = addr & 0xff;
 					//cpuState.param2 = (addr >> 8) & 0xff;
-					if((addr&0xFF00)!=((addr+reg_y)&0xFF00)){
+					if((addr&0xFF00)!=((addr+_reg_y)&0xFF00)){
 						cycleAdd = 1;
 					}
-					addr+=reg_y;
+					addr+=_reg_y;
 					break;
 				}case 10:{
 					// Pre-indexed Indirect mode. Find the 16-bit address 
@@ -279,10 +311,10 @@ package system
 					// address.
 					addr = load(opaddr+2);
 					//cpuState.param1 = addr & 0xff;
-					if((addr&0xFF00)!=((addr+reg_x)&0xFF00)){
+					if((addr&0xFF00)!=((addr+_reg_x)&0xFF00)){
 						cycleAdd = 1;
 					}
-					addr+=reg_x;
+					addr+=_reg_x;
 					addr&=0xFF;
 					addrHi = (addr + 1) & 0xFF;
 					addr = load(addr);
@@ -300,10 +332,10 @@ package system
 					addr = load(addr);
 					addr |= load(addrHi) << 8;
 					
-					if((addr&0xFF00)!=((addr+reg_y)&0xFF00)){
+					if((addr&0xFF00)!=((addr+_reg_y)&0xFF00)){
 						cycleAdd = 1;
 					}
-					addr += reg_y;
+					addr += _reg_y;
 					break;
 				}case 12:{
 					// Indirect Absolute mode. Find the 16-bit address contained 
@@ -316,7 +348,7 @@ package system
 						addr = mem[addr] + (mem[(addr & 0xFF00) | (((addr & 0xFF) + 1) & 0xFF)] << 8);// Read from address given in op
 					}
 					else{
-						addr = nes.mmap.load(addr, mem) + (nes.mmap.load((addr & 0xFF00) | (((addr & 0xFF) + 1) & 0xFF), mem) << 8);
+						addr = load(addr) + (load((addr & 0xFF00) | (((addr & 0xFF) + 1) & 0xFF)) << 8);
 					}
 					break;
 
@@ -329,819 +361,898 @@ package system
 			// ----------------------------------------------------------------------------------------------------
 			// Decode & execute instruction:
 			// ----------------------------------------------------------------------------------------------------
-
-			// This should be compiled to a jump table.
-			switch(opinf&0xFF){
-				case 0:{
-					// *******
-					// * ADC *
-					// *******
-
-					// Add with carry.
-					temp = reg_acc + load(addr) + f_carry;
-					f_overflow = ((!(((reg_acc ^ load(addr)) & 0x80)!=0) && (((reg_acc ^ temp) & 0x80))!=0)?1:0);
-					f_carry = (temp>255?1:0);
-					f_sign = (temp>>7)&1;
-					f_zero = temp&0xFF;
-					reg_acc = (temp&255);
-					cycleCount+=cycleAdd;
-					break;
-
-				}case 1:{
-					// *******
-					// * AND *
-					// *******
-
-					// AND memory with accumulator.
-					reg_acc = reg_acc & load(addr);
-					f_sign = (reg_acc>>7)&1;
-					f_zero = reg_acc;
-					//reg_acc = temp;
-					if(addrMode!=11)cycleCount+=cycleAdd; // PostIdxInd = 11
-					break;
-				}case 2:{
-					// *******
-					// * ASL *
-					// *******
-
-					// Shift left one bit
-					if(addrMode == 4){ // ADDR_ACC = 4
-
-						f_carry = (reg_acc>>7)&1;
-						reg_acc = (reg_acc<<1)&255;
-						f_sign = (reg_acc>>7)&1;
-						f_zero = reg_acc;
-
-					}else{
-
-						temp = load(addr);
-						f_carry = (temp>>7)&1;
-						temp = (temp<<1)&255;
-						f_sign = (temp>>7)&1;
-						f_zero = temp;
-						write(addr, temp);
-
-					}
-					break;
-
-				}case 3:{
-
-					// *******
-					// * BCC *
-					// *******
-
-					// Branch on carry clear
-					if(f_carry == 0){
-						cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-						reg_pc = addr;
-					}
-					break;
-
-				}case 4:{
-
-					// *******
-					// * BCS *
-					// *******
-
-					// Branch on carry set
-					if(f_carry == 1){
-						cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-						reg_pc = addr;
-					}
-					break;
-
-				}case 5:{
-
-					// *******
-					// * BEQ *
-					// *******
-
-					// Branch on zero
-					if(f_zero == 0){
-						cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-						reg_pc = addr;
-					}
-					break;
-
-				}case 6:{
-
-					// *******
-					// * BIT *
-					// *******
-
-					temp = load(addr);
-					f_sign = (temp>>7)&1;
-					f_overflow = (temp>>6)&1;
-					temp &= reg_acc;
-					f_zero = temp;
-					break;
-
-				}case 7:{
-
-					// *******
-					// * BMI *
-					// *******
-
-					// Branch on negative result
-					if(f_sign == 1){
-						cycleCount++;
-						reg_pc = addr;
-					}
-					break;
-
-				}case 8:{
-
-					// *******
-					// * BNE *
-					// *******
-
-					// Branch on not zero
-					if(f_zero != 0){
-						cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-						reg_pc = addr;
-					}
-					break;
-
-				}case 9:{
-
-					// *******
-					// * BPL *
-					// *******
-
-					// Branch on positive result
-					if(f_sign == 0){
-						cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-						reg_pc = addr;
-					}
-					break;
-
-				}case 10:{
-
-					// *******
-					// * BRK *
-					// *******
-
-					reg_pc+=2;
-					push((reg_pc>>8)&255);
-					push(reg_pc&255);
-					f_brk = 1;	
-
-					push(
-						(f_carry)|
-						((f_zero==0?1:0)<<1)|
-						(f_interrupt<<2)|
-						(f_decimal<<3)|
-						(f_brk<<4)|
-						(f_notused<<5)|
-						(f_overflow<<6)|
-						(f_sign<<7)
-					);
-
-					f_interrupt = 1;
-					//reg_pc = load(0xFFFE) | (load(0xFFFF) << 8);
-					reg_pc = load16bit(0xFFFE);
-					reg_pc--;
-					break;
-
-				}case 11:{
-
-					// *******
-					// * BVC *
-					// *******
-
-					// Branch on overflow clear
-					if(f_overflow == 0){
-						cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-						reg_pc = addr;
-					}
-					break;
-
-				}case 12:{
-
-					// *******
-					// * BVS *
-					// *******
-
-					// Branch on overflow set
-					if(f_overflow == 1){
-						cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-						reg_pc = addr;
-					}
-					break;
-
-				}case 13:{
-
-					// *******
-					// * CLC *
-					// *******
-
-					// Clear carry flag
-					f_carry = 0;
-					break;
-
-				}case 14:{
-
-					// *******
-					// * CLD *
-					// *******
-
-					// Clear decimal flag
-					f_decimal = 0;
-					break;
-
-				}case 15:{
-
-					// *******
-					// * CLI *
-					// *******
-
-					// Clear interrupt flag
-					f_interrupt = 0;
-					break;
-
-				}case 16:{
-
-					// *******
-					// * CLV *
-					// *******
-
-					// Clear overflow flag
-					f_overflow = 0;
-					break;
-
-				}case 17:{
-
-					// *******
-					// * CMP *
-					// *******
-
-					// Compare memory and accumulator:
-					temp = reg_acc - load(addr);
-					f_carry = (temp>=0?1:0);
-					f_sign = (temp>>7)&1;
-					f_zero = temp&0xFF;
-					cycleCount+=cycleAdd;
-					break;
-
-				}case 18:{
-
-					// *******
-					// * CPX *
-					// *******
-
-					// Compare memory and index X:
-					temp = reg_x - load(addr);
-					f_carry = (temp>=0?1:0);
-					f_sign = (temp>>7)&1;
-					f_zero = temp&0xFF;
-					break;
-
-				}case 19:{
-
-					// *******
-					// * CPY *
-					// *******
-
-					// Compare memory and index Y:
-					temp = reg_y - load(addr);
-					f_carry = (temp>=0?1:0);
-					f_sign = (temp>>7)&1;
-					f_zero = temp&0xFF;
-					break;
-
-				}case 20:{
-
-					// *******
-					// * DEC *
-					// *******
-
-					// Decrement memory by one:
-					temp = (load(addr)-1)&0xFF;
-					f_sign = (temp>>7)&1;
-					f_zero = temp;
-					write(addr, temp);
-					break;
-
-				}case 21:{
-
-					// *******
-					// * DEX *
-					// *******
-
-					// Decrement index X by one:
-					reg_x = (reg_x-1)&0xFF;
-					f_sign = (reg_x>>7)&1;
-					f_zero = reg_x;
-					break;
-
-				}case 22:{
-
-					// *******
-					// * DEY *
-					// *******
-
-					// Decrement index Y by one:
-					reg_y = (reg_y-1)&0xFF;
-					f_sign = (reg_y>>7)&1;
-					f_zero = reg_y;
-					break;
-
-				}case 23:{
-
-					// *******
-					// * EOR *
-					// *******
-
-					// XOR Memory with accumulator, store in accumulator:
-					reg_acc = (load(addr)^reg_acc)&0xFF;
-					f_sign = (reg_acc>>7)&1;
-					f_zero = reg_acc;
-					cycleCount+=cycleAdd;
-					break;
-
-				}case 24:{
-
-					// *******
-					// * INC *
-					// *******
-
-					// Increment memory by one:
-					temp = (load(addr)+1)&0xFF;
-					f_sign = (temp>>7)&1;
-					f_zero = temp;
-					write(addr, temp&0xFF);
-					break;
-
-				}case 25:{
-
-					// *******
-					// * INX *
-					// *******
-
-					// Increment index X by one:
-					reg_x = (reg_x+1)&0xFF;
-					f_sign = (reg_x>>7)&1;
-					f_zero = reg_x;
-					break;
-
-				}case 26:{
-
-					// *******
-					// * INY *
-					// *******
-
-					// Increment index Y by one:
-					reg_y++;
-					reg_y &= 0xFF;
-					f_sign = (reg_y>>7)&1;
-					f_zero = reg_y;
-					break;
-
-				}case 27:{
-
-					// *******
-					// * JMP *
-					// *******
-
-					// Jump to new location:
-					reg_pc = addr-1;
-					break;
-
-				}case 28:{
-
-					// *******
-					// * JSR *
-					// *******
-
-					// Jump to new location, saving return address.
-					// Push return address on stack:
-					push((reg_pc>>8)&255);
-					push(reg_pc&255);
-					reg_pc = addr-1;
-					break;
-
-				}case 29:{
-
-					// *******
-					// * LDA *
-					// *******
-
-					// Load accumulator with memory:
-					reg_acc = load(addr);
-					f_sign = (reg_acc>>7)&1;
-					f_zero = reg_acc;
-					cycleCount+=cycleAdd;
-					break;
-
-				}case 30:{
-
-					// *******
-					// * LDX *
-					// *******
-
-					// Load index X with memory:
-					reg_x = load(addr);
-					f_sign = (reg_x>>7)&1;
-					f_zero = reg_x;
-					cycleCount+=cycleAdd;
-					break;
-
-				}case 31:{
-
-					// *******
-					// * LDY *
-					// *******
-
-					// Load index Y with memory:
-					reg_y = load(addr);
-					f_sign = (reg_y>>7)&1;
-					f_zero = reg_y;
-					cycleCount+=cycleAdd;
-					break;
-
-				}case 32:{
-
-					// *******
-					// * LSR *
-					// *******
-
-					// Shift right one bit:
-					if(addrMode == 4){ // ADDR_ACC
-
-						temp = (reg_acc & 0xFF);
-						f_carry = temp&1;
-						temp >>= 1;
-						reg_acc = temp;
-
-					}else{
-
-						temp = load(addr) & 0xFF;
-						f_carry = temp&1;
-						temp >>= 1;
-						write(addr, temp);
-
-					}
-					f_sign = 0;
-					f_zero = temp;
-					break;
-
-				}case 33:{
-
-					// *******
-					// * NOP *
-					// *******
-
-					// No OPeration.
-					// Ignore.
-					break;
-
-				}case 34:{
-
-					// *******
-					// * ORA *
-					// *******
-
-					// OR memory with accumulator, store in accumulator.
-					temp = (load(addr)|reg_acc)&255;
-					f_sign = (temp>>7)&1;
-					f_zero = temp;
-					reg_acc = temp;
-					if(addrMode!=11)cycleCount+=cycleAdd; // PostIdxInd = 11
-					break;
-
-				}case 35:{
-
-					// *******
-					// * PHA *
-					// *******
-
-					// Push accumulator on stack
-					push(reg_acc);
-					break;
-
-				}case 36:{
-
-					// *******
-					// * PHP *
-					// *******
-
-					// Push processor status on stack
-					// This doesn't belong here: f_brk = 1;
-					push(
-						(f_carry)|
-						((f_zero==0?1:0)<<1)|
-						(f_interrupt<<2)|
-						(f_decimal<<3)|
-						(1<<4)|  // Break flag is always set when pushed onto the stack
-						(f_notused<<5)|
-						(f_overflow<<6)|
-						(f_sign<<7)
-					);
-					break;
-
-				}case 37:{
-
-					// *******
-					// * PLA *
-					// *******
-
-					// Pull accumulator from stack
-					reg_acc = pull();
-					f_sign = (reg_acc>>7)&1;
-					f_zero = reg_acc;
-					break;
-
-				}case 38:{
-
-					// *******
-					// * PLP *
-					// *******
-
-					// Pull processor status from stack
-					temp = pull();
-					f_carry     = (temp   )&1;
-					f_zero      = (((temp>>1)&1)==1)?0:1;
-					f_interrupt = (temp>>2)&1;
-					f_decimal   = (temp>>3)&1;
-					f_brk       = 0;// (temp >> 4) & 1;
-					f_notused   = (temp>>5)&1;
-					f_overflow  = (temp>>6)&1;
-					f_sign      = (temp>>7)&1;
-
-					f_notused = 1;
-					break;
-
-				}case 39:{
-
-					// *******
-					// * ROL *
-					// *******
-
-					// Rotate one bit left
-					if(addrMode == 4){ // ADDR_ACC = 4
-
-						temp = reg_acc;
-						add = f_carry;
-						f_carry = (temp>>7)&1;
-						temp = ((temp<<1)&0xFF)+add;
-						reg_acc = temp;
-
-					}else{
-
-						temp = load(addr);
-						add = f_carry;
-						f_carry = (temp>>7)&1;
-						temp = ((temp<<1)&0xFF)+add;    
-						write(addr, temp);
-
-					}
-					f_sign = (temp>>7)&1;
-					f_zero = temp;
-					break;
-
-				}case 40:{
-
-					// *******
-					// * ROR *
-					// *******
-
-					// Rotate one bit right
-					if(addrMode == 4){ // ADDR_ACC = 4
-
-						add = f_carry<<7;
-						f_carry = reg_acc&1;
-						temp = (reg_acc>>1)+add;   
-						reg_acc = temp;
-
-					}else{
-
-						temp = load(addr);
-						add = f_carry<<7;
-						f_carry = temp&1;
-						temp = (temp>>1)+add;
-						write(addr, temp);
-
-					}
-					f_sign = (temp>>7)&1;
-					f_zero = temp;
-					break;
-
-				}case 41:{
-
-					// *******
-					// * RTI *
-					// *******
-
-					// Return from interrupt. Pull status and PC from stack.
-					
-					temp = pull();
-					f_carry     = (temp   )&1;
-					f_zero      = ((temp>>1)&1)==0?1:0;
-					f_interrupt = (temp>>2)&1;
-					f_decimal   = (temp>>3)&1;
-					f_brk       = 0;// (temp >> 4) & 1;
-					f_notused   = (temp>>5)&1;
-					f_overflow  = (temp>>6)&1;
-					f_sign      = (temp>>7)&1;
-
-					reg_pc = pull();
-					reg_pc += (pull()<<8);
-					if(reg_pc==0xFFFF){
-						return 0;
-					}
-					reg_pc--;
-					f_notused = 1;
-					break;
-
-				}case 42:{
-
-					// *******
-					// * RTS *
-					// *******
-
-					// Return from subroutine. Pull PC from stack.
-					
-					reg_pc = pull();
-					reg_pc += (pull()<<8);
-					
-					if(reg_pc==0xFFFF){
-						return 0; // return from NSF play routine:
-					}
-					break;
-
-				}case 43:{
-
-					// *******
-					// * SBC *
-					// *******
-
-					temp = reg_acc-load(addr)-(1-f_carry);
-					f_sign = (temp>>7)&1;
-					f_zero = temp&0xFF;
-					f_overflow = ((((reg_acc^temp)&0x80)!=0 && ((reg_acc^load(addr))&0x80)!=0)?1:0);
-					f_carry = (temp<0?0:1);
-					reg_acc = (temp&0xFF);
-					if(addrMode!=11)cycleCount+=cycleAdd; // PostIdxInd = 11
-					break;
-
-				}case 44:{
-
-					// *******
-					// * SEC *
-					// *******
-
-					// Set carry flag
-					f_carry = 1;
-					break;
-
-				}case 45:{
-
-					// *******
-					// * SED *
-					// *******
-
-					// Set decimal mode
-					f_decimal = 1;
-					break;
-
-				}case 46:{
-
-					// *******
-					// * SEI *
-					// *******
-
-					// Set interrupt disable status
-					f_interrupt = 1;
-					break;
-
-				}case 47:{
-
-					// *******
-					// * STA *
-					// *******
-
-					// Store accumulator in memory
-					write(addr, reg_acc);
-					break;
-
-				}case 48:{
-
-					// *******
-					// * STX *
-					// *******
-
-					// Store index X in memory
-					write(addr, reg_x);
-					break;
-
-				}case 49:{
-
-					// *******
-					// * STY *
-					// *******
-
-					// Store index Y in memory:
-					write(addr, reg_y);
-					break;
-
-				}case 50:{
-
-					// *******
-					// * TAX *
-					// *******
-
-					// Transfer accumulator to index X:
-					reg_x = reg_acc;
-					f_sign = (reg_acc>>7)&1;
-					f_zero = reg_acc;
-					break;
-
-				}case 51:{
-
-					// *******
-					// * TAY *
-					// *******
-
-					// Transfer accumulator to index Y:
-					reg_y = reg_acc;
-					f_sign = (reg_acc>>7)&1;
-					f_zero = reg_acc;
-					break;
-
-				}case 52:{
-
-					// *******
-					// * TSX *
-					// *******
-
-					// Transfer stack pointer to index X:
-					reg_x = (reg_sp-0x0100);
-					f_sign = (reg_sp>>7)&1;
-					f_zero = reg_x;
-					break;
-
-				}case 53:{
-
-					// *******
-					// * TXA *
-					// *******
-
-					// Transfer index X to accumulator:
-					reg_acc = reg_x;
-					f_sign = (reg_x>>7)&1;
-					f_zero = reg_x;
-					break;
-
-				}case 54:{
-
-					// *******
-					// * TXS *
-					// *******
-
-					// Transfer index X to stack pointer:
-					reg_sp = (reg_x+0x0100);
-					stackWrap();
-					break;
-
-				}case 55:{
-
-					// *******
-					// * TYA *
-					// *******
-
-					// Transfer index Y to accumulator:
-					reg_acc = reg_y;
-					f_sign = (reg_y>>7)&1;
-					f_zero = reg_y;
-					break;
-
-				}default:{
-
-					// *******
-					// * ??? *
-					// *******
-
-					nes.stop();
-					//cpuState.error = true;
-					nes.crashMessage = "Game crashed, invalid opcode at address $"+opaddr.toString(16);
-					break;
-
-				}
-
-			}// end of switch
+			//cycleCount = _instructions[opinf & 0xFF].apply(null, [opaddr, addr, addrMode, cycleCount, cycleAdd]);
+			cycleCount = _instructions[opinf & 0xFF](opaddr, addr, addrMode, cycleCount, cycleAdd);
 			
 			//cpuState.CYC = cycleCount;
 
 			return cycleCount;
 		}
 		
+		private function instrADC(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * ADC * - case 0
+			// *******
+			var temp:int;
+			// Add with carry.
+			temp = _reg_acc + load(addr) + _f_carry;
+			_f_overflow = ((!(((_reg_acc ^ load(addr)) & 0x80)!=0) && (((_reg_acc ^ temp) & 0x80))!=0)?1:0);
+			_f_carry = (temp>255?1:0);
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp&0xFF;
+			_reg_acc = (temp&255);
+			cycleCount += cycleAdd;
+			
+			return cycleCount;
+		}
+		
+		private function instrAND(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * AND * - case 1
+			// *******
+
+			// AND memory with accumulator.
+			_reg_acc = _reg_acc & load(addr);
+			_f_sign = (_reg_acc>>7)&1;
+			_f_zero = _reg_acc;
+			//reg_acc = temp;
+			if (addrMode != 11) cycleCount += cycleAdd; // PostIdxInd = 11
+			
+			return cycleCount;
+		}
+		
+		private function instrASL(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * ASL * - case 2
+			// *******
+			var temp:int;
+			
+			// Shift left one bit
+			if(addrMode == 4){ // ADDR_ACC = 4
+
+				_f_carry = (_reg_acc>>7)&1;
+				_reg_acc = (_reg_acc<<1)&255;
+				_f_sign = (_reg_acc>>7)&1;
+				_f_zero = _reg_acc;
+
+			}else{
+
+				temp = load(addr);
+				_f_carry = (temp>>7)&1;
+				temp = (temp<<1)&255;
+				_f_sign = (temp>>7)&1;
+				_f_zero = temp;
+				write(addr, temp);
+
+			}
+			return cycleCount;
+		}
+		
+		private function instrBCC(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * BCC * - case 3
+			// *******
+
+			// Branch on carry clear
+			if(_f_carry == 0){
+				cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
+				_reg_pc = addr;
+			}
+			return cycleCount;
+		}
+		
+		private function instrBCS(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+
+			// *******
+			// * BCS * - case 4
+			// *******
+
+			// Branch on carry set
+			if(_f_carry == 1){
+				cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
+				_reg_pc = addr;
+			}
+			return cycleCount;
+		}
+		
+		private function instrBEQ(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * BEQ * - case 5
+			// *******
+
+			// Branch on zero
+			if(_f_zero == 0){
+				cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
+				_reg_pc = addr;
+			}
+			return cycleCount;
+		}
+		
+		private function instrBIT(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * BIT *
+			// *******
+			var temp:int;
+			temp = load(addr);
+			_f_sign = (temp>>7)&1;
+			_f_overflow = (temp>>6)&1;
+			temp &= _reg_acc;
+			_f_zero = temp;
+			return cycleCount;
+		}
+		
+		private function instrBMI(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * BMI *
+			// *******
+
+			// Branch on negative result
+			if(_f_sign == 1){
+				cycleCount++;
+				_reg_pc = addr;
+			}
+			return cycleCount;
+		}
+		
+		private function instrBNE(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * BNE *
+			// *******
+
+			// Branch on not zero
+			if(_f_zero != 0){
+				cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
+				_reg_pc = addr;
+			}
+			return cycleCount;
+		}
+		
+		private function instrBPL(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * BPL *
+			// *******
+
+			// Branch on positive result
+			if(_f_sign == 0){
+				cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
+				_reg_pc = addr;
+			}
+			return cycleCount;
+		}
+		
+		private function instrBRK(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * BRK *
+			// *******
+
+			_reg_pc+=2;
+			push((_reg_pc>>8)&255);
+			push(_reg_pc&255);
+			_f_brk = 1;	
+
+			push(
+				(_f_carry)|
+				((_f_zero==0?1:0)<<1)|
+				(_f_interrupt<<2)|
+				(_f_decimal<<3)|
+				(_f_brk<<4)|
+				(_f_notused<<5)|
+				(_f_overflow<<6)|
+				(_f_sign<<7)
+			);
+
+			_f_interrupt = 1;
+			//reg_pc = load(0xFFFE) | (load(0xFFFF) << 8);
+			_reg_pc = load16bit(0xFFFE);
+			_reg_pc--;
+			return cycleCount;
+		}
+		
+		private function instrBVC(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * BVC *
+			// *******
+
+			// Branch on overflow clear
+			if(_f_overflow == 0){
+				cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
+				_reg_pc = addr;
+			}
+			return cycleCount;
+		}
+		
+		private function instrBVS(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * BVS *
+			// *******
+
+			// Branch on overflow set
+			if(_f_overflow == 1){
+				cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
+				_reg_pc = addr;
+			}
+			return cycleCount;
+		}
+		
+		private function instrCLC(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * CLC *
+			// *******
+
+			// Clear carry flag
+			_f_carry = 0;
+			return cycleCount;
+		}
+		
+		private function instrCLD(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * CLD *
+			// *******
+
+			// Clear decimal flag
+			_f_decimal = 0;
+			return cycleCount;
+		}
+		
+		private function instrCLI(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * CLI *
+			// *******
+
+			// Clear interrupt flag
+			_f_interrupt = 0;
+			return cycleCount;
+		}
+		
+		private function instrCLV(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * CLV *
+			// *******
+
+			// Clear overflow flag
+			_f_overflow = 0;
+			return cycleCount;
+		}
+		
+		private function instrCMP(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * CMP *
+			// *******
+			var temp:int;
+			// Compare memory and accumulator:
+			temp = _reg_acc - load(addr);
+			_f_carry = (temp>=0?1:0);
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp&0xFF;
+			cycleCount += cycleAdd;
+			return cycleCount;
+		}
+		
+		private function instrCPX(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * CPX *
+			// *******
+			var temp:int;
+			// Compare memory and index X:
+			temp = _reg_x - load(addr);
+			_f_carry = (temp>=0?1:0);
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp & 0xFF;
+			return cycleCount;
+		}
+		
+		private function instrCPY(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * CPY * - case 19
+			// *******
+			var temp:int;
+			// Compare memory and index Y:
+			temp = _reg_y - load(addr);
+			_f_carry = (temp>=0?1:0);
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp&0xFF;
+			return cycleCount;
+		}
+		
+		private function instrDEC(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * DEC * - case 20
+			// *******
+			var temp:int;
+			// Decrement memory by one:
+			temp = (load(addr)-1)&0xFF;
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp;
+			write(addr, temp);
+			return cycleCount;
+		}
+		
+		private function instrDEX(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * DEX *
+			// *******
+
+			// Decrement index X by one:
+			_reg_x = (_reg_x-1)&0xFF;
+			_f_sign = (_reg_x>>7)&1;
+			_f_zero = _reg_x;
+			return cycleCount;
+		}
+		
+		private function instrDEY(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * DEY *
+			// *******
+
+			// Decrement index Y by one:
+			_reg_y = (_reg_y-1)&0xFF;
+			_f_sign = (_reg_y>>7)&1;
+			_f_zero = _reg_y;
+			return cycleCount;
+		}
+		
+		private function instrEOR(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * EOR *
+			// *******
+
+			// XOR Memory with accumulator, store in accumulator:
+			_reg_acc = (load(addr)^_reg_acc)&0xFF;
+			_f_sign = (_reg_acc>>7)&1;
+			_f_zero = _reg_acc;
+			cycleCount+=cycleAdd;
+			return cycleCount;
+		}
+		
+		private function instrINC(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * INC *
+			// *******
+			var temp:int;
+			// Increment memory by one:
+			temp = (load(addr)+1)&0xFF;
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp;
+			write(addr, temp&0xFF);
+			return cycleCount;
+		}
+		
+		private function instrINX(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * INX *
+			// *******
+
+			// Increment index X by one:
+			_reg_x = (_reg_x+1)&0xFF;
+			_f_sign = (_reg_x>>7)&1;
+			_f_zero = _reg_x;
+			return cycleCount;
+		}
+		
+		private function instrINY(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * INY *
+			// *******
+
+			// Increment index Y by one:
+			_reg_y++;
+			_reg_y &= 0xFF;
+			_f_sign = (_reg_y>>7)&1;
+			_f_zero = _reg_y;
+			return cycleCount;
+		}
+		
+		private function instrJMP(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * JMP *
+			// *******
+
+			// Jump to new location:
+			_reg_pc = addr-1;
+			return cycleCount;
+		}
+		
+		private function instrJSR(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * JSR *
+			// *******
+
+			// Jump to new location, saving return address.
+			// Push return address on stack:
+			push((_reg_pc>>8)&255);
+			push(_reg_pc&255);
+			_reg_pc = addr-1;
+			return cycleCount;
+		}
+		
+		private function instrLDA(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * LDA *
+			// *******
+
+			// Load accumulator with memory:
+			_reg_acc = load(addr);
+			_f_sign = (_reg_acc>>7)&1;
+			_f_zero = _reg_acc;
+			cycleCount+=cycleAdd;
+			return cycleCount;
+		}
+		
+		private function instrLDX(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * LDX *
+			// *******
+
+			// Load index X with memory:
+			_reg_x = load(addr);
+			_f_sign = (_reg_x>>7)&1;
+			_f_zero = _reg_x;
+			cycleCount+=cycleAdd;
+			return cycleCount;
+		}
+		
+		private function instrLDY(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * LDY *
+			// *******
+
+			// Load index Y with memory:
+			_reg_y = load(addr);
+			_f_sign = (_reg_y>>7)&1;
+			_f_zero = _reg_y;
+			cycleCount+=cycleAdd;
+			return cycleCount;
+		}
+		
+		private function instrLSR(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * LSR *
+			// *******
+			var temp:int;
+			
+			// Shift right one bit:
+			if(addrMode == 4){ // ADDR_ACC
+
+				temp = (_reg_acc & 0xFF);
+				_f_carry = temp&1;
+				temp >>= 1;
+				_reg_acc = temp;
+
+			}else{
+
+				temp = load(addr) & 0xFF;
+				_f_carry = temp&1;
+				temp >>= 1;
+				write(addr, temp);
+
+			}
+			_f_sign = 0;
+			_f_zero = temp;
+			return cycleCount;
+		}
+		
+		private function instrNOP(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * NOP *
+			// *******
+
+			// No OPeration.
+			return cycleCount;
+		}
+		
+		private function instrORA(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * ORA *
+			// *******
+
+			// OR memory with accumulator, store in accumulator.
+			var temp:int;
+			temp = (load(addr)|_reg_acc)&255;
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp;
+			_reg_acc = temp;
+			if(addrMode!=11)cycleCount+=cycleAdd; // PostIdxInd = 11
+			return cycleCount;
+		}
+		
+		private function instrPHA(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * PHA *
+			// *******
+
+			// Push accumulator on stack
+			push(_reg_acc);
+			return cycleCount;			
+		}
+		
+		private function instrPHP(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * PHP *
+			// *******
+
+			// Push processor status on stack
+			// This doesn't belong here: f_brk = 1;
+			push(
+				(_f_carry)|
+				((_f_zero==0?1:0)<<1)|
+				(_f_interrupt<<2)|
+				(_f_decimal<<3)|
+				(1<<4)|  // Break flag is always set when pushed onto the stack
+				(_f_notused<<5)|
+				(_f_overflow<<6)|
+				(_f_sign<<7)
+			);
+			return cycleCount;
+		}
+		
+		private function instrPLA(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * PLA *
+			// *******
+
+			// Pull accumulator from stack
+			_reg_acc = pull();
+			_f_sign = (_reg_acc>>7)&1;
+			_f_zero = _reg_acc;
+			return cycleCount;
+		}
+		
+		private function instrPLP(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * PLP *
+			// *******
+
+			// Pull processor status from stack
+			var temp:int;
+			temp = pull();
+			_f_carry     = (temp   )&1;
+			_f_zero      = (((temp>>1)&1)==1)?0:1;
+			_f_interrupt = (temp>>2)&1;
+			_f_decimal   = (temp>>3)&1;
+			_f_brk       = 0;// (temp >> 4) & 1;
+			_f_notused   = (temp>>5)&1;
+			_f_overflow  = (temp>>6)&1;
+			_f_sign      = (temp>>7)&1;
+
+			_f_notused = 1;
+			return cycleCount;
+		}
+		
+		private function instrROL(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			var temp:int;
+			var add:uint;
+			
+			// *******
+			// * ROL *
+			// *******
+
+			// Rotate one bit left
+			if(addrMode == 4){ // ADDR_ACC = 4
+
+				temp = _reg_acc;
+				add = _f_carry;
+				_f_carry = (temp>>7)&1;
+				temp = ((temp<<1)&0xFF)+add;
+				_reg_acc = temp;
+
+			}else{
+
+				temp = load(addr);
+				add = _f_carry;
+				_f_carry = (temp>>7)&1;
+				temp = ((temp<<1)&0xFF)+add;    
+				write(addr, temp);
+			}
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp;
+			return cycleCount;
+		}
+		
+		private function instrROR(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * ROR *
+			// *******
+			var add:uint;
+			var temp:int;
+			// Rotate one bit right
+			if(addrMode == 4){ // ADDR_ACC = 4
+
+				add = _f_carry<<7;
+				_f_carry = _reg_acc&1;
+				temp = (_reg_acc>>1)+add;   
+				_reg_acc = temp;
+
+			}else{
+
+				temp = load(addr);
+				add = _f_carry<<7;
+				_f_carry = temp&1;
+				temp = (temp>>1)+add;
+				write(addr, temp);
+
+			}
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp;
+			return cycleCount;
+		}
+		
+		private function instrRTI(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * RTI *
+			// *******
+
+			// Return from interrupt. Pull status and PC from stack.
+			var temp:int;
+			temp = pull();
+			_f_carry     = (temp   )&1;
+			_f_zero      = ((temp>>1)&1)==0?1:0;
+			_f_interrupt = (temp>>2)&1;
+			_f_decimal   = (temp>>3)&1;
+			_f_brk       = 0;// (temp >> 4) & 1;
+			_f_notused   = (temp>>5)&1;
+			_f_overflow  = (temp>>6)&1;
+			_f_sign      = (temp>>7)&1;
+
+			_reg_pc = pull();
+			_reg_pc += (pull()<<8);
+			if(_reg_pc==0xFFFF){
+				return 0;
+			}
+			_reg_pc--;
+			_f_notused = 1;
+			return cycleCount;
+		}
+		
+		private function instrRTS(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * RTS *
+			// *******
+
+			// Return from subroutine. Pull PC from stack.
+			
+			_reg_pc = pull();
+			_reg_pc += (pull()<<8);
+			
+			if(_reg_pc==0xFFFF){
+				return 0; // return from NSF play routine:
+			}
+			return cycleCount;
+		}
+		
+		private function instrSBC(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * SBC *
+			// *******
+			var temp:int;
+			temp = _reg_acc-load(addr)-(1-_f_carry);
+			_f_sign = (temp>>7)&1;
+			_f_zero = temp&0xFF;
+			_f_overflow = ((((_reg_acc^temp)&0x80)!=0 && ((_reg_acc^load(addr))&0x80)!=0)?1:0);
+			_f_carry = (temp<0?0:1);
+			_reg_acc = (temp&0xFF);
+			if(addrMode!=11)cycleCount+=cycleAdd; // PostIdxInd = 11
+			return cycleCount;
+		}
+		
+		private function instrSEC(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * SEC *
+			// *******
+
+			// Set carry flag
+			_f_carry = 1;
+			return cycleCount;
+		}
+		
+		private function instrSED(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * SED *
+			// *******
+
+			// Set decimal mode
+			_f_decimal = 1;
+			return cycleCount;
+		}
+		
+		private function instrSEI(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * SEI *
+			// *******
+
+			// Set interrupt disable status
+			_f_interrupt = 1;
+			return cycleCount;
+		}
+		
+		private function instrSTA(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * STA *
+			// *******
+
+			// Store accumulator in memory
+			write(addr, _reg_acc);
+			return cycleCount;
+		}
+		
+		private function instrSTX(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * STX *
+			// *******
+
+			// Store index X in memory
+			write(addr, _reg_x);
+			return cycleCount;
+		}
+		
+		private function instrSTY(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * STY *
+			// *******
+
+			// Store index Y in memory:
+			write(addr, _reg_y);
+			return cycleCount;
+		}
+		
+		private function instrTAX(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint		
+		{
+			// *******
+			// * TAX *
+			// *******
+
+			// Transfer accumulator to index X:
+			_reg_x = _reg_acc;
+			_f_sign = (_reg_acc>>7)&1;
+			_f_zero = _reg_acc;
+			return cycleCount;
+		}
+		
+		private function instrTAY(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * TAY *
+			// *******
+
+			// Transfer accumulator to index Y:
+			_reg_y = _reg_acc;
+			_f_sign = (_reg_acc>>7)&1;
+			_f_zero = _reg_acc;
+			return cycleCount;
+		}
+		
+		private function instrTSX(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * TSX *
+			// *******
+
+			// Transfer stack pointer to index X:
+			_reg_x = (_reg_sp-0x0100);
+			_f_sign = (_reg_sp>>7)&1;
+			_f_zero = _reg_x;
+			return cycleCount;
+		}
+
+		private function instrTXA(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * TXA *
+			// *******
+
+			// Transfer index X to accumulator:
+			_reg_acc = _reg_x;
+			_f_sign = (_reg_x>>7)&1;
+			_f_zero = _reg_x;
+			return cycleCount;
+		}
+		
+		private function instrTXS(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * TXS *
+			// *******
+
+			// Transfer index X to stack pointer:
+			_reg_sp = (_reg_x+0x0100);
+			stackWrap();
+			return cycleCount;
+		}
+		
+		private function instrTYA(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * TYA *
+			// *******
+
+			// Transfer index Y to accumulator:
+			_reg_acc = _reg_y;
+			_f_sign = (_reg_y>>7)&1;
+			_f_zero = _reg_y;
+			return cycleCount;
+		}
+		
+		private function instrXXX(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
+		{
+			// *******
+			// * ??? *
+			// *******
+
+			nes.stop();
+			//cpuState.error = true;
+			nes.crashMessage = "Game crashed, invalid opcode.";
+			return cycleCount;
+			
+		}
+
 		private function load(addr:uint):uint
 		{
-			if (addr < 0x2000) {
-				return mem[addr & 0x7FF];
+			addr &= 0xFFFF;
+			var loadHandler:int = loadHandlers[addr];
+			
+			if (loadHandler == 0)
+			{
+				if (addr < 0x2000)
+				{
+					return mem[addr & 0x7ff];
+				}
+				else
+				{
+					return mem[addr];
+				}
 			}
-			else {
-				return nes.mmap.load(addr, mem);
+			else
+			{
+				return _handlerJumpTable[loadHandler](addr);
 			}
 		}
 		
@@ -1152,49 +1263,61 @@ package system
 					| (mem[(addr+1)&0x7FF]<<8);
 			}
 			else {
-				return nes.mmap.load(addr, mem) | (nes.mmap.load(addr+1, mem) << 8);
+				return load(addr) | (load(addr+1) << 8);
 			}
 		}
 		
 		private function write(addr:uint, val:uint):void
 		{
-			if(addr < 0x2000) {
-				mem[addr&0x7FF] = val;
+			var writeHandler:int = writeHandlers[addr];
+			
+			if (writeHandler == 0)
+			{
+				if (addr < 0x2000)
+				{
+					mem[addr & 0x7ff] = val;
+				}
+				else
+				{
+					mem[addr] = val;
+				}
 			}
 			else {
-				nes.mmap.write(addr,val);
+				_handlerJumpTable[writeHandler](addr, val);
 			}
 		}
 
 		public function requestIrq(type:uint):void
 		{
-			if(irqRequested){
+			if(_irqRequested){
 				if(type == IRQ_NORMAL){
 					return;
 				}
 				////System.out.println("too fast irqs. type="+type);
 			}
-			irqRequested = true;
-			irqType = type;
+			_irqRequested = true;
+			_irqType = type;
 		}
 
 		private function push(value:uint):void
 		{
-			nes.mmap.write(reg_sp, value);
-			reg_sp--;
-			reg_sp = 0x0100 | (reg_sp&0xFF);
+			mem[_reg_sp] = value;
+			//nes.mmap.write(_reg_sp, value);
+			_reg_sp--;
+			_reg_sp = 0x0100 | (_reg_sp&0xFF);
 		}
 
 		private function stackWrap():void
 		{
-			reg_sp = 0x0100 | (reg_sp&0xFF);
+			_reg_sp = 0x0100 | (_reg_sp&0xFF);
 		}
 
 		private function pull():uint
 		{
-			reg_sp++;
-			reg_sp = 0x0100 | (reg_sp&0xFF);
-			return nes.mmap.load(reg_sp, mem);
+			_reg_sp++;
+			_reg_sp = 0x0100 | (_reg_sp & 0xFF);
+			return mem[_reg_sp];
+			//return nes.mmap.load(_reg_sp, mem);
 		}
 
 		private function pageCross(addr1:uint, addr2:uint):Boolean
@@ -1210,60 +1333,60 @@ package system
 		private function doNonMaskableInterrupt(status:uint):void
 		{
 			// Check whether VBlank Interrupts are enabled
-			if ((nes.mmap.load(0x2000, mem) & 128) != 0) 
+			if ((load(0x2000) & 128) != 0) 
 			{ 
-				reg_pc_new++;
-				push((reg_pc_new>>8)&0xFF);
-				push(reg_pc_new&0xFF);
+				_reg_pc_new++;
+				push((_reg_pc_new>>8)&0xFF);
+				push(_reg_pc_new&0xFF);
 				//F_INTERRUPT_NEW = 1;
 				push(status);
 
-				reg_pc_new = nes.mmap.load(0xFFFA, mem) | (nes.mmap.load(0xFFFB, mem) << 8);
-				reg_pc_new--;
+				_reg_pc_new = load(0xFFFA) | (load(0xFFFB) << 8);
+				_reg_pc_new--;
 			}
 		}
 		
 		private function doResetInterrupt():void
 		{
-			reg_pc_new = nes.mmap.load(0xFFFC, mem) | (nes.mmap.load(0xFFFD, mem) << 8);
-			reg_pc_new--;
+			_reg_pc_new = load(0xFFFC) | (load(0xFFFD) << 8);
+			_reg_pc_new--;
 		}
 
 		private function doIrq(status:uint):void
 		{
-			reg_pc_new++;
-			push((reg_pc_new>>8)&0xFF);
-			push(reg_pc_new&0xFF);
+			_reg_pc_new++;
+			push((_reg_pc_new>>8)&0xFF);
+			push(_reg_pc_new&0xFF);
 			push(status);
-			f_interrupt_new = 1;
-			f_brk_new = 0;
+			_f_interrupt_new = 1;
+			_f_brk_new = 0;
 
-			reg_pc_new = nes.mmap.load(0xFFFE, mem) | (nes.mmap.load(0xFFFF, mem) << 8);
-			reg_pc_new--;
+			_reg_pc_new = load(0xFFFE) | (load(0xFFFF) << 8);
+			_reg_pc_new--;
 		}
 
 		private function getStatus():uint
 		{
-			return (f_carry)
-					|((f_zero==0?1:0)<<1)
-					|(f_interrupt<<2)
-					|(f_decimal<<3)
-					|(f_brk<<4)
-					|(f_notused<<5)
-					|(f_overflow<<6)
-					|(f_sign<<7);
+			return (_f_carry)
+					|((_f_zero==0?1:0)<<1)
+					|(_f_interrupt<<2)
+					|(_f_decimal<<3)
+					|(_f_brk<<4)
+					|(_f_notused<<5)
+					|(_f_overflow<<6)
+					|(_f_sign<<7);
 		}
 		
 		private function setStatus(st:uint):void
 		{
-			f_carry     = (st   )&1;
-			f_zero      = (((st>>1)&1)==1)?0:1;
-			f_interrupt = (st>>2)&1;
-			f_decimal   = (st>>3)&1;
-			f_brk       = (st>>4)&1;
-			f_notused   = (st>>5)&1;
-			f_overflow  = (st>>6)&1;
-			f_sign      = (st>>7)&1;
+			_f_carry     = (st   )&1;
+			_f_zero      = (((st>>1)&1)==1)?0:1;
+			_f_interrupt = (st>>2)&1;
+			_f_decimal   = (st>>3)&1;
+			_f_brk       = (st>>4)&1;
+			_f_notused   = (st>>5)&1;
+			_f_overflow  = (st>>6)&1;
+			_f_sign      = (st>>7)&1;
 		}
 	}
 
@@ -1359,7 +1482,7 @@ internal class OpData
 	private static const ADDR_INDABS:uint = 		12;
 	
 	public var opdata:Vector.<uint>;
-	private var instname:Array;
+	public static var instname:Array;
 	private var addrDesc:Array;
 	
 	
@@ -1548,7 +1671,10 @@ internal class OpData
 		setOp(INS_LSR,0x5E,ADDR_ABSX,3,7);
 		
 		// NOP:
-		setOp(INS_NOP,0xEA,ADDR_IMP,1,2);
+		setOp(INS_NOP, 0xEA, ADDR_IMP, 1, 2);
+		setOp(INS_NOP, 0x04, ADDR_ZP, 2, 3);
+		setOp(INS_NOP, 0x44, ADDR_ZP, 2, 3);
+		setOp(INS_NOP, 0x64, ADDR_ZP, 2, 3);
 		
 		// ORA:
 		setOp(INS_ORA,0x09,ADDR_IMM,2,2);

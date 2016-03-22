@@ -22,12 +22,12 @@ package system
 		
 		private var nes:NES;
 		
-		private var mapperName:Array;
+		private var mapperName:Vector.<String>;
     
-		private var header:Array;
-		public var rom:Array;
-		public var vrom:Array;
-		public var vromTile:Array;
+		private var header:Vector.<uint>;
+		public var rom:Vector.<Vector.<uint>>;
+		public var vrom:Vector.<Vector.<uint>>;
+		public var vromTile:Vector.<Vector.<Tile>>;
 		public var romCount:uint;
 		public var vromCount:uint;
 		private var mirroring:uint;
@@ -41,7 +41,7 @@ package system
 		{
 			this.nes = nes;
     
-			mapperName = new Array(92);
+			mapperName = new Vector.<String>(92);
 			
 			for (var i:uint=0;i<92;i++) {
 				mapperName[i] = "Unknown Mapper";
@@ -98,7 +98,7 @@ package system
 			}
 			
 			// Load 16 bytes into the header
-			header = new Array(16);
+			header = new Vector.<uint>(16);
 			for (i = 0; i < 16; i++)
 			{
 				header[i] = data.readByte() & 0xFF;
@@ -134,10 +134,10 @@ package system
 				mapperType &= 0xF; // Ignore byte 7
 			}
 			// Load PRG-ROM banks:
-			rom = new Array(romCount);
+			rom = new Vector.<Vector.<uint>>(romCount);
 			var offset:uint = 16;
 			for (i=0; i < romCount; i++) {
-				rom[i] = new Array(16384);
+				rom[i] = new Vector.<uint>(16384);
 				data.position = offset;
 				for (j=0; j < 16384; j++) {
 					if (offset+j >= data.length) {
@@ -148,9 +148,9 @@ package system
 				offset += 16384;
 			}
 			// Load CHR-ROM banks:
-			vrom = new Array(vromCount);
+			vrom = new Vector.<Vector.<uint>>(vromCount);
 			for (i=0; i < vromCount; i++) {
-				vrom[i] = new Array(4096);
+				vrom[i] = new Vector.<uint>(4096);
 				data.position = offset;
 				for (j=0; j < 4096; j++) {
 					if (offset+j >= data.length){
@@ -162,7 +162,7 @@ package system
 			}
 			
 			// Create VROM tiles:
-			vromTile = new Array(vromCount);
+			vromTile = new Vector.<Vector.<Tile>>(vromCount);
 			for (i=0; i < vromCount; i++) {
 				vromTile[i] = new Vector.<Tile>(256);
 				for (j=0; j < 256; j++) {

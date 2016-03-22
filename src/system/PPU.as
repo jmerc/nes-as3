@@ -218,8 +218,8 @@ package system
 			palTable = new PaletteTable();
 			palTable.loadNTSCPalette();
 			
-			updateControlReg1(0);
-			updateControlReg2(0);			
+			updateControlReg1(0x2000, 0);
+			updateControlReg2(0x2001, 0);			
 		}
 		
 		// Sets nametable Mirror
@@ -582,8 +582,10 @@ package system
 			}
 		}
 		
-		public function updateControlReg1(value:uint):void
+		public function updateControlReg1(addr:uint, value:uint):void
 		{	
+			nes.cpu.mem[0x2000] = value;
+			
 			triggerRendering();
 			
 			f_nmiOnVBlank =    (value>>7)&1;
@@ -599,8 +601,10 @@ package system
 			
 		}
 		
-		public function updateControlReg2(value:uint):void
+		public function updateControlReg2(address:uint, value:uint):void
 		{
+			nes.cpu.mem[0x2001] = value;
+			
 			triggerRendering();
 			
 			f_color =       (value>>5)&7;
@@ -625,7 +629,7 @@ package system
 		
 		// CPU Register $2002:
 		// Read the Status Register.
-		public function readStatusRegister():uint
+		public function readStatusRegister(addr:uint):uint
 		{	
 			var tmp:uint = nes.cpu.mem[0x2002];
 			
@@ -642,15 +646,15 @@ package system
 		
 		// CPU Register $2003:
 		// Write the SPR-RAM address that is used for sramWrite (Register 0x2004 in CPU memory map)
-		public function writeSRAMAddress(address:uint):void
+		public function writeSRAMAddress(addr:uint, value:uint):void
 		{
-			sramAddress = address;
+			sramAddress = value;
 		}
 		
 		// CPU Register $2004 (R):
 		// Read from SPR-RAM (Sprite RAM).
 		// The address should be set first.
-		public function sramLoad():uint
+		public function sramLoad(addr:uint):uint
 		{
 			/*short tmp = sprMem.load(sramAddress);
 			sramAddress++; // Increment address
@@ -662,7 +666,7 @@ package system
 		// CPU Register $2004 (W):
 		// Write to SPR-RAM (Sprite RAM).
 		// The address should be set first.
-		public function sramWrite(value:uint):void
+		public function sramWrite(addr:uint, value:uint):void
 		{
 			spriteMem[sramAddress] = value;
 			spriteRamWriteUpdate(sramAddress,value);
@@ -674,7 +678,7 @@ package system
 		// Write to scroll registers.
 		// The first write is the vertical offset, the second is the
 		// horizontal offset:
-		public function scrollWrite(value:uint):void
+		public function scrollWrite(addr:uint, value:uint):void
 		{
 			triggerRendering();
 			
@@ -697,21 +701,21 @@ package system
 		// CPU Register $2006:
 		// Sets the adress used when reading/writing from/to VRAM.
 		// The first write sets the high byte, the second the low byte.
-		public function writeVRAMAddress(address:uint):void
+		public function writeVRAMAddress(addr:uint, value:uint):void
 		{
 			
 			if (firstWrite) {
 				
-				regFV = (address>>4)&3;
-				regV = (address>>3)&1;
-				regH = (address>>2)&1;
-				regVT = (regVT&7) | ((address&3)<<3);
+				regFV = (value>>4)&3;
+				regV = (value>>3)&1;
+				regH = (value>>2)&1;
+				regVT = (regVT&7) | ((value&3)<<3);
 				
 			}else {
 				triggerRendering();
 				
-				regVT = (regVT&24) | ((address>>5)&7);
-				regHT = address&31;
+				regVT = (regVT&24) | ((value>>5)&7);
+				regHT = value&31;
 				
 				cntFV = regFV;
 				cntV = regV;
@@ -734,7 +738,7 @@ package system
 		
 		// CPU Register $2007(R):
 		// Read from PPU memory. The address should be set first.
-		public function vramLoad():uint
+		public function vramLoad(addr:uint):uint
 		{
 			var tmp:uint;
 			
@@ -783,7 +787,7 @@ package system
 		
 		// CPU Register $2007(W):
 		// Write to PPU memory. The address should be set first.
-		public function vramWrite(value:uint):void
+		public function vramWrite(addr:uint, value:uint):void
 		{
 			triggerRendering();
 			cntsToAddress();
@@ -812,7 +816,7 @@ package system
 		// CPU Register $4014:
 		// Write 256 bytes of main memory
 		// into Sprite RAM.
-		public function sramDMA(value:uint):void
+		public function sramDMA(addr:uint, value:uint):void
 		{
 			var baseAddress:uint = value * 0x100;
 			var data:uint;

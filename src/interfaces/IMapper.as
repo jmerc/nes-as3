@@ -9,9 +9,9 @@ package interfaces
 	{
 		function reset():void;
 		
-		function load(addr:uint, cpumem:Vector.<uint>):uint;
+		//function load(addr:uint, cpumem:Vector.<uint>):uint;
 		
-		function write(addr:uint, value:uint):void;
+		//function write(addr:uint, value:uint):void;
 		
 		function clockIrqCounter():void;
 		

@@ -2,6 +2,7 @@ package system
 {
 	import flash.utils.*;
 	import interfaces.*;
+	import tests.CPUState;
 	import tests.interfaces.ITest;
 	import tests.nestest.Nestest;
 	import views.*;
@@ -19,6 +20,10 @@ package system
 		public var mmap:IMapper;
 		public var rom:ROM;
 		public var input:IInput;
+		
+		private static const HISTORY_LENGTH:int = 10;
+		private var _history:Vector.<CPUState>;
+		private var _historyIndex:int = HISTORY_LENGTH;
 		
 		
 		// TODO: Create a NES configuration object
@@ -62,6 +67,13 @@ package system
 			apu = new APU(this);
 			mmap = null;  // Set in loadRom()
 			input = this.options.input;
+			
+			// Set up CPU State History
+			_history = new Vector.<CPUState>(HISTORY_LENGTH);
+			for (var i:int = 0; i < HISTORY_LENGTH; i++)
+			{
+				_history[i] = new CPUState();
+			}
 			
 			ui.updateStatus("Ready to load a ROM.");
 		}
@@ -110,6 +122,8 @@ package system
 				// Run CPU and APU
 				if (cpu.cyclesToHalt == 0)
 				{
+					(_historyIndex == 0) ? _historyIndex = HISTORY_LENGTH - 1 : _historyIndex--;
+					cpu.cpuState = _history[_historyIndex];
 					cycles = cpu.emulate();
 				}
 				else if (cpu.cyclesToHalt > 8)
@@ -186,6 +200,11 @@ package system
 			clearInterval(frameInterval);
 			clearInterval(fpsInterval);
 			isRunning = false;
+			// Trace cpu state history
+			for (var i:int = 0; i < HISTORY_LENGTH; i++)
+			{
+				trace(_history[(i + _historyIndex) % HISTORY_LENGTH].toString());
+			}
 		}
 		
 		private function reloadRom():void

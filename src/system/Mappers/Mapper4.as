@@ -42,14 +42,21 @@ package system.Mappers
 			this.prgAddressChanged = false;
 		}
 		
-		override public function write(address:uint, value:uint):void
+		override protected function registerWriteHandlers():void
 		{
-			// Writes to addresses other than MMC registers are handled by NoMapper.
-			if (address < 0x8000) {
-				super.write(address, value);
-				return;
+			super.registerWriteHandlers();
+			
+			var mmcRegWritehandler:int = _nes.cpu.registerHandler(mmcRegWrite);
+			for (var addr:int = 0x8000; addr < 0x10000; addr++)
+			{
+				_nes.cpu.writeHandlers[addr] = mmcRegWritehandler;
 			}
-
+		}
+		
+		
+	
+		private function mmcRegWrite(address:uint, value:uint):void
+		{
 			switch (address) {
 				case 0x8000:
 					// Command/Address Select register
@@ -70,12 +77,12 @@ package system.Mappers
 				case 0xA000:        
 					// Mirroring select
 					if ((value & 1) !== 0) {
-						this.nes.ppu.setMirroring(
+						this._nes.ppu.setMirroring(
 							ROM.HORIZONTAL_MIRRORING
 						);
 					}
 					else {
-						this.nes.ppu.setMirroring(ROM.VERTICAL_MIRRORING);
+						this._nes.ppu.setMirroring(ROM.VERTICAL_MIRRORING);
 					}
 					break;
 				
@@ -186,13 +193,13 @@ package system.Mappers
 						// Load the two hardwired banks:
 						if (this.prgAddressSelect === 0) { 
 							this.load8kRomBank(
-								((this.nes.rom.romCount - 1) * 2),
+								((this._nes.rom.romCount - 1) * 2),
 								0xC000
 							);
 						}
 						else {
 							this.load8kRomBank(
-								((this.nes.rom.romCount - 1) * 2),
+								((this._nes.rom.romCount - 1) * 2),
 								0x8000
 							);
 						}
@@ -217,13 +224,13 @@ package system.Mappers
 						// Load the two hardwired banks:
 						if (this.prgAddressSelect === 0) { 
 							this.load8kRomBank(
-								((this.nes.rom.romCount - 1) * 2),
+								((this._nes.rom.romCount - 1) * 2),
 								0xC000
 							);
 						}
 						else {              
 							this.load8kRomBank(
-								((this.nes.rom.romCount - 1) * 2),
+								((this._nes.rom.romCount - 1) * 2),
 								0x8000
 							);
 						}
@@ -234,14 +241,14 @@ package system.Mappers
 
 		override public function loadROM():void
 		{
-			if (!this.nes.rom.valid) {
+			if (!this._nes.rom.valid) {
 				trace("MMC3: Invalid ROM! Unable to load.");
 				return;
 			}
 
 			// Load hardwired PRG banks (0xC000 and 0xE000):
-			this.load8kRomBank(((this.nes.rom.romCount - 1) * 2), 0xC000);
-			this.load8kRomBank(((this.nes.rom.romCount - 1) * 2) + 1, 0xE000);
+			this.load8kRomBank(((this._nes.rom.romCount - 1) * 2), 0xC000);
+			this.load8kRomBank(((this._nes.rom.romCount - 1) * 2) + 1, 0xE000);
 
 			// Load swappable PRG banks (0x8000 and 0xA000):
 			this.load8kRomBank(0, 0x8000);
@@ -254,7 +261,7 @@ package system.Mappers
 			this.loadBatteryRam();
 
 			// Do Reset-Interrupt:
-			this.nes.cpu.requestIrq(CPU.IRQ_RESET);
+			this._nes.cpu.requestIrq(CPU.IRQ_RESET);
 		}
 
 		override public function clockIrqCounter():void
@@ -263,7 +270,7 @@ package system.Mappers
 				this.irqCounter--;
 				if (this.irqCounter < 0) {
 					// Trigger IRQ:
-					this.nes.cpu.requestIrq(CPU.IRQ_NORMAL);
+					this._nes.cpu.requestIrq(CPU.IRQ_NORMAL);
 					this.irqCounter = this.irqLatchValue;
 				}
 			}
