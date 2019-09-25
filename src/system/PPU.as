@@ -8,84 +8,63 @@ package system
 	 */
 	public class PPU 
 	{
-		private static const STATUS_VRAMWRITE:uint = 4;
-		private static const STATUS_SLSPRITECOUNT:uint = 5;
-		public static const STATUS_SPRITE0HIT:uint = 6;
-		private static const STATUS_VBLANK:uint = 7;
 		
 		private var nes:NES;
-		public var vramMem:Vector.<uint>;
-		private var spriteMem:Vector.<uint>;
-		private var vramAddress:uint;
-		private var vramTmpAddress:uint;
-		private var vramBufferedReadValue:uint;
-		private var firstWrite:Boolean;
-		private var sramAddress:uint;
-		private var currentMirroring:int;
-		public var requestEndFrame:Boolean;
-		private var nmiOk:Boolean;
-		private var dummyCycleToggle:Boolean;
-		private var validTileData:Boolean;
-		public var nmiCounter:uint;
-		private var scanlineAlreadyRendered:Boolean;
 		
-		private var f_nmiOnVBlank:uint;
-		private var f_spriteSize:uint;
-		private var f_bgPatternTable:uint;
-		private var f_spPatternTable:uint;
-		private var f_addrInc:uint;
-		private var f_nTblAddress:uint;
-		private var f_color:uint;
-		public var f_spVisibility:uint;
-		private var f_bgVisibility:uint;
-		private var f_spClipping:uint;
-		private var f_bgClipping:uint;
-		private var f_dispType:uint;
+
+		private var _mem:Vector.<uint>;
+		private var _objectAttributeMem:Vector.<uint>;
+		private var _paletteMem:Vector.<uint>;
+		private var _x:int;
+		private var _y:int;
+		private var _mirroring:int;
+		private var _nametable0Start:uint = 0x2000;
+		private var _nametable1Start:uint = 0x2400;
+		private var _nametable2Start:uint = 0x2800;
+		private var _nametable3Start:uint = 0x2C00;
 		
-		private var cntFV:uint;
-		private var cntV:uint;
-		private var cntH:uint;
-		private var cntVT:uint;
-		private var cntHT:uint;
+		private var _renderingEnabled:Boolean;
+		private var _oddFrame:Boolean = false;
 		
-		private var regFV:uint;
-		private var regV:uint;
-		private var regH:uint;
-		private var regVT:uint;
-		private var regHT:uint;
-		private var regFH:uint;
-		private var regS:uint;
+		// PPU control register (Write-only)
+		private var _regController:uint;  	// 0x2000
+		private const CTRL_NAMETABLE:uint =			0x03; 	// Base nametable address
+															//   (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
+		private const CTRL_VRAM_INC:uint =			0x04; 	// VRAM address increment per CPU read/write of PPUDATA
+															//   (0: add 1, going across; 1: add 32, going down)
+		private const CTRL_SPRITE:uint =			0x08; 	// Sprite pattern table address for 8x8 sprites
+															//   (0: $0000; 1: $1000; ignored in 8x16 mode)
+		private const CTRL_BACKGROUND:uint =		0x10;	// Background pattern table address (0: $0000; 1: $1000)
+		private const CTRL_SPRITE_SIZE:uint =		0x20;	// Sprite size (0: 8x8 pixels; 1: 8x16 pixels)
+		private const CTRL_PPU_MASTER:uint =		0x40;	// PPU master/slave select
+															//   (0: read backdrop from EXT pins; 1: output color on EXT pins)
+		private const CTRL_VBLANK:uint =			0x80;	// Generate an NMI at the start of the
+															//   vertical blanking interval (0: off; 1: on)
 		
-		private var curNt:uint;
-		private var attrib:Vector.<uint>;
-		public var buffer:Vector.<uint>;
-		private var bgBuffer:Vector.<uint>;
-		private var pixRendered:Vector.<uint>;
+		private var _regMask:uint;  		// 0x2001		
+		private const MASK_GREYSCALE:uint =			0x01;	// Greyscale (0: normal color, 1: produce a greyscale display)
+		private const MASK_BG_LEFT:uint = 			0x02;	// 1: Show background in leftmost 8 pixels of screen, 0: Hide
+		private const MASK_SPRITES_LEFT:uint =		0x04;	// 1: Show sprites in leftmost 8 pixels of screen, 0: Hide
+		private const MASK_SHOW_BG:uint = 			0x08;	// 1: Show background
+		private const MASK_SHOW_SPRITES:uint =		0x10;	// 1: Show sprites
+		private const MASK_EMPH_RED:uint = 			0x20;	// Emphasize red
+		private const MASK_EMPH_GREEN:uint =		0x40;	// Emphasize green
+		private const MASK_EMPH_BLUE:uint = 		0x80;	// Emphasize blue
+
+		private var _regStatus:uint;		// 0x2002
+		private const STATUS_OVERFLOW:uint =		0x20;
+		private const STATUS_SPRITE0:uint =			0x40;
+		private const STATUS_VBLANK:uint =			0x80;
 		
-		private var scantile:Vector.<Tile>;
-		public var scanline:int;
-		private var lastRenderedScanline:int;
-		public var curX:uint;
-		private var sprX:Vector.<int>;
-		private var sprY:Vector.<int>;
-		private var sprTile:Vector.<uint>;
-		private var sprCol:Vector.<uint>;
-		private var vertFlip:Vector.<Boolean>;
-		private var horiFlip:Vector.<Boolean>;
-		private var bgPriority:Vector.<Boolean>;
-		public var spr0HitX:int;
-		public var spr0HitY:int;
-		private var hitSpr0:Boolean;
-		private var sprPalette:Vector.<uint>;
-		private var imgPalette:Vector.<uint>;
-		public var ptTile:Vector.<Tile>;
-		private var ntable1:Vector.<uint>;
-		private var nameTable:Vector.<NameTable>;
-		private var vramMirrorTable:Vector.<uint>;
-		private var palTable:PaletteTable;
+		// OAM Address/Write/DMA			// 0x2003, 0x2004, 0x4014
+		private var _oamAddress:uint;
 		
-		private var showSpr0Hit:Boolean = false;
-		private var clipToTvSize:Boolean = true;
+		// VRam Address/Write 				// 0x2006, 0x2007
+		private var _bufferedDataReg:uint;
+		private var _regAddress:uint;
+		private var _addressLatch:Boolean;
+		
+		public function get memory():Vector.<uint> { return _mem; }
 		
 		public function PPU(nes:NES) 
 		{
@@ -98,1411 +77,307 @@ package system
 			var i:uint;
 			
 			// Memory
-			vramMem = new Vector.<uint>(0x8000);
-			spriteMem = new Vector.<uint>(0x100);
-			for (i = 0; i < vramMem.length; i++)
+			_mem = new Vector.<uint>(0x8000);
+			_objectAttributeMem = new Vector.<uint>(0x100);
+			_paletteMem = new Vector.<uint>(0x20);
+			for (i = 0; i < _mem.length; i++) { _mem[i] = 0; }
+			for (i = 0; i < _objectAttributeMem.length; i++) { _objectAttributeMem[i] = 0; }
+			for (i = 0; i < _paletteMem.length; i++) { _paletteMem[i] = 0; }
+			
+			_x = 0;
+			_y = 0;
+			_renderingEnabled = false;
+			_oddFrame = false;
+			_addressLatch = false;
+			_regAddress = 0;
+			_bufferedDataReg = 0;
+		}
+		
+		public function incrementCycles(cycles:int):Boolean
+		{
+			var inFrame:Boolean = true;
+			
+			// Track X,Y Coordinate
+			// TODO: NMI, Sprite0, Even/Odd timing			
+			while (cycles > 0)
 			{
-				vramMem[i] = 0;
-			}
-			for (i = 0; i < spriteMem.length; i++)
-			{
-				spriteMem[i] = 0;
-			}
-			
-			// VRAM I/O
-			vramAddress = 0;
-			vramTmpAddress = 0;
-			vramBufferedReadValue = 0;
-			firstWrite = true;  // VRAM/Scroll Hi/Lo latch
-			
-			// SPR-RAM I/O
-			sramAddress = 0;  // 8-bit only
-			
-			currentMirroring = -1;
-			requestEndFrame = false;
-			nmiOk = false;
-			dummyCycleToggle = false;
-			validTileData = false;
-			nmiCounter = 0;
-			scanlineAlreadyRendered = false;
-			
-			// Control Flags Regsiter 1:
-			f_nmiOnVBlank = 0;
-			f_spriteSize = 0;
-			f_bgPatternTable = 0;
-			f_spPatternTable = 0;
-			f_addrInc = 0;
-			f_nTblAddress = 0;
-			
-			// Control Flags Register 2
-			f_color = 0;
-			f_spVisibility = 0;
-			f_bgVisibility = 0;
-			f_spClipping = 0;
-			f_bgClipping = 0;
-			f_dispType = 0;
-			
-			// Counters
-			cntFV = 0;
-			cntV = 0;
-			cntH = 0;
-			cntVT = 0;
-			cntHT = 0;
-			
-			// Registers
-			regFV = 0;
-			regV = 0;
-			regH = 0;
-			regVT = 0;
-			regHT = 0;
-			regFH = 0;
-			regS = 0;
-			
-			// These are temporary variables used in rendering and sound procedures.
-			// Their states outside of those procedures can be ignored.
-			// TODO: the use of this is a bit weird, investigate
-			curNt = 0;
-			
-			// Varibles used when rendering
-			attrib = new Vector.<uint>(32);
-			buffer = new Vector.<uint>(256 * 240);
-			bgBuffer = new Vector.<uint>(256 * 240);
-			pixRendered = new Vector.<uint>(256 * 240);
-			
-			scantile = new Vector.<Tile>(32);
-			
-			// Initial misc vars
-			scanline = 0;
-			lastRenderedScanline = -1;
-			curX = 0;
-			
-			// Sprite Data
-			sprX = new Vector.<int>(64);  // X Coordinate
-			sprY = new Vector.<int>(64);  // Y Coordinate
-			sprTile = new Vector.<uint>(64);  // Tile Index (into pattern table)
-			sprCol = new Vector.<uint>(64);  // Upper Two its of color
-			vertFlip = new Vector.<Boolean>(64);  // Vertical Flip
-			horiFlip = new Vector.<Boolean>(64);  // Horizontal Flip
-			bgPriority = new Vector.<Boolean>(64);  // Background Priority
-			spr0HitX = 0;  // Sprite #0 hit x coordinate
-			spr0HitY = 0;  // Sprite #0 hit y coordinate
-			hitSpr0 = false;
-			
-			// Palette Data
-			sprPalette = new Vector.<uint>(16);
-			imgPalette = new Vector.<uint>(16);
-			
-			// Create pattern table tile buffers
-			ptTile = new Vector.<Tile>(512);
-			for (i = 0; i < 512; i++)
-			{
-				ptTile[i] = new Tile();
+				_x++;
+				
+				if (_x > 340)
+				{
+					_x -= 340;
+					_y++;
+				}
+				if (_y > 261)
+				{
+					_y -= 261;
+ 					inFrame = false;
+				}
+				
+				// TODO: Check for Sprite 0
+				
+				//1,240 - set VBlank
+				if (_x == 1 && _y == 240)
+					setVBlank();
+				
+				//1,261 - clear VB	lank, Sprite 0, Overflow
+				if (_x == 1 && _y == 261)
+				{
+					//debug("Clear Status Register");
+					_regStatus = 0;
+				}
+				cycles--;
 			}
 			
-			// Create nametable buffers
-			// Name Table data:
-			ntable1 = new Vector.<uint>(4);
-			currentMirroring = -1;
-			nameTable = new Vector.<NameTable>(4);
-			for (i = 0; i < 4; i++)
-			{
-				nameTable[i] = new NameTable(32, 32, "Nt" + i);
-			}
-			
-			// Initialize mirror lookup table
-			vramMirrorTable = new Vector.<uint>(0x8000);
-			for (i = 0; i < 0x8000; i++)
-			{
-				vramMirrorTable[i] = i;
-			}
-			palTable = new PaletteTable();
-			palTable.loadNTSCPalette();
-			
-			updateControlReg1(0x2000, 0);
-			updateControlReg2(0x2001, 0);			
+			return inFrame;
 		}
 		
 		// Sets nametable Mirror
 		public function setMirroring(mirroring:uint):void
 		{
-			if (mirroring == currentMirroring) { return; }
-			
-			currentMirroring = mirroring;
-			triggerRendering();
-			
-			// Remove Mirroring:
-			if (vramMirrorTable == null)
+			_mirroring = mirroring;
+			switch (_mirroring)
 			{
-				vramMirrorTable = new Vector.<uint>(0x8000);
-			}
-			for (var i:uint = 0; i < 0x8000; i++)
-			{
-				vramMirrorTable[i] = i;
-			}
-			
-			// Palette Mirroring
-			defineMirrorRegion(0x3f20,0x3f00,0x20);
-			defineMirrorRegion(0x3f40,0x3f00,0x20);
-			defineMirrorRegion(0x3f80,0x3f00,0x20);
-			defineMirrorRegion(0x3fc0,0x3f00,0x20);
-			
-			// Additional mirroring:
-			defineMirrorRegion(0x3000,0x2000,0xf00);
-			defineMirrorRegion(0x4000,0x0000,0x4000);
-		
-			if (mirroring == ROM.HORIZONTAL_MIRRORING) 
-			{
-				// Horizontal mirroring.
-				ntable1[0] = 0;
-				ntable1[1] = 0;
-				ntable1[2] = 1;
-				ntable1[3] = 1;
-				
-				defineMirrorRegion(0x2400,0x2000,0x400);
-				defineMirrorRegion(0x2c00,0x2800,0x400);
-				
-			}
-			else if (mirroring == ROM.VERTICAL_MIRRORING) 
-			{
-				// Vertical mirroring.
-				ntable1[0] = 0;
-				ntable1[1] = 1;
-				ntable1[2] = 0;
-				ntable1[3] = 1;
-				
-				defineMirrorRegion(0x2800,0x2000,0x400);
-				defineMirrorRegion(0x2c00,0x2400,0x400);
-			}
-			else if (mirroring == ROM.SINGLESCREEN_MIRRORING) 
-			{
-				// Single Screen mirroring
-				ntable1[0] = 0;
-				ntable1[1] = 0;
-				ntable1[2] = 0;
-				ntable1[3] = 0;
-				
-				defineMirrorRegion(0x2400,0x2000,0x400);
-				defineMirrorRegion(0x2800,0x2000,0x400);
-				defineMirrorRegion(0x2c00,0x2000,0x400);
-			}
-			else if (mirroring == ROM.SINGLESCREEN_MIRRORING2) 
-			{
-				ntable1[0] = 1;
-				ntable1[1] = 1;
-				ntable1[2] = 1;
-				ntable1[3] = 1;
-				
-				defineMirrorRegion(0x2400,0x2400,0x400);
-				defineMirrorRegion(0x2800,0x2400,0x400);
-				defineMirrorRegion(0x2c00,0x2400,0x400);
-			}
-			else 
-			{
-				// Assume Four-screen mirroring.
-				ntable1[0] = 0;
-				ntable1[1] = 1;
-				ntable1[2] = 2;
-				ntable1[3] = 3;
-			}   
-			
-		}
-		
-		
-		// Define a mirrored area in the address lookup table.
-		// Assumes the regions don't overlap.
-		// The 'to' region is the region that is physically in memory.
-		private function defineMirrorRegion(fromStart:uint, toStart:uint, size:uint):void
-		{
-			for (var i:uint = 0; i < size; i++)
-			{
-				vramMirrorTable[fromStart+i] = toStart+i;
-			}
-		}
-		
-		public function startVBlank():void
-		{	
-			// Do NMI:
-			nes.cpu.requestIrq(CPU.IRQ_NMI);
-			
-			// Make sure everything is rendered:
-			if (lastRenderedScanline < 239) {
-				renderFramePartially(
-					lastRenderedScanline+1,240-lastRenderedScanline
-				);
-			}
-			
-			// End frame:
-			endFrame();
-			
-			// Reset scanline counter:
-			lastRenderedScanline = -1;
-		}
-		
-		public function endScanLine():void
-		{
-			switch (scanline) {
-				case 19:
-					// Dummy scanline.
-					// May be variable length:
-					if (dummyCycleToggle) {
-
-						// Remove dead cycle at end of scanline,
-						// for next scanline:
-						curX = 1;
-						dummyCycleToggle = !dummyCycleToggle;
-
-					}
+				case ROM.SINGLESCREEN_MIRRORING:  // All name tables at 0x2000
+					_nametable0Start = 0x2000;
+					_nametable1Start = 0x2000;
+					_nametable2Start = 0x2000;
+					_nametable3Start = 0x2000;
+					debug("setMirroring = Single Screen");
 					break;
-					
-				case 20:
-					// Clear VBlank flag:
-					setStatusFlag(STATUS_VBLANK,false);
-
-					// Clear Sprite #0 hit flag:
-					setStatusFlag(STATUS_SPRITE0HIT,false);
-					hitSpr0 = false;
-					spr0HitX = -1;
-					spr0HitY = -1;
-
-					if (f_bgVisibility == 1 || f_spVisibility==1) {
-
-						// Update counters:
-						cntFV = regFV;
-						cntV = regV;
-						cntH = regH;
-						cntVT = regVT;
-						cntHT = regHT;
-
-						if (f_bgVisibility==1) {
-							// Render dummy scanline:
-							renderBgScanline(false, 0);
-						}   
-
-					}
-
-					if (f_bgVisibility==1 && f_spVisibility==1) {
-
-						// Check sprite 0 hit for first scanline:
-						checkSprite0(0);
-
-					}
-
-					if (f_bgVisibility==1 || f_spVisibility==1) {
-						// Clock mapper IRQ Counter:
-						nes.mmap.clockIrqCounter();
-					}
+				case ROM.HORIZONTAL_MIRRORING:  // Used for vertical scrolling
+					_nametable0Start = 0x2000;
+					_nametable1Start = 0x2000;
+					_nametable2Start = 0x2800;
+					_nametable3Start = 0x2800;
+					debug("setMirroring = Vertical Scrolling");
 					break;
-					
-				case 261:
-					// Dead scanline, no rendering.
-					// Set VINT:
-					setStatusFlag(STATUS_VBLANK,true);
-					requestEndFrame = true;
-					nmiCounter = 9;
-				
-					// Wrap around:
-					scanline = -1; // will be incremented to 0
-					
+				case ROM.VERTICAL_MIRRORING:  // used for horizontal scrolling
+					_nametable0Start = 0x2000;
+					_nametable1Start = 0x2400;
+					_nametable2Start = 0x2000;
+					_nametable3Start = 0x2400;
+					debug("setMirroring = Horizontal Scrolling");
 					break;
-					
-				default:
-					if (scanline >= 21 && scanline <= 260) {
-
-						// Render normally:
-						if (f_bgVisibility == 1) {
-
-							if (!scanlineAlreadyRendered) {
-								// update scroll:
-								cntHT = regHT;
-								cntH = regH;
-								renderBgScanline(true,scanline+1-21);
-							}
-							scanlineAlreadyRendered=false;
-
-							// Check for sprite 0 (next scanline):
-							if (!hitSpr0 && f_spVisibility == 1) {
-								if (sprX[0] >= -7 &&
-										sprX[0] < 256 &&
-										sprY[0] + 1 <= (scanline - 20) &&
-										(sprY[0] + 1 + (
-											f_spriteSize === 0 ? 8 : 16
-										)) >= (scanline - 20)) {
-									if (checkSprite0(scanline - 20)) {
-										hitSpr0 = true;
-									}
-								}
-							}
-
-						}
-
-						if (f_bgVisibility==1 || f_spVisibility==1) {
-							// Clock mapper IRQ Counter:
-							nes.mmap.clockIrqCounter();
-						}
-					}
+				case ROM.FOURSCREEN_MIRRORING:  // used for bidrectional scrolling
+					_nametable0Start = 0x2000;
+					_nametable1Start = 0x2400;
+					_nametable2Start = 0x2800;
+					_nametable3Start = 0x2C00;
+					debug("setMirroring = Four Screen");
+					break;
 			}
-			
-			scanline++;
-			regsToAddress();
-			cntsToAddress();
 			
 		}
 		
-		private var _prevBgColor:int = -1;
-		private var _bgArr:Vector.<uint>;
-		
-		private function getBgArr(bgColor:uint):Vector.<uint>
+		private function calculateMirroredAddr(addr:uint):uint
 		{
-			if (_prevBgColor == bgColor) { return _bgArr; }
-			
-			_bgArr = new Vector.<uint>(256 * 240);
-			
-			for (var i:uint=0; i<256*240; i++) {
-				_bgArr[i] = bgColor;
+			// what nametable are we accessing?
+			var internalAddress:uint = addr & 0x3FF;
+			var nametable:int = (addr >> 10) & 0x3;
+			switch (nametable)
+			{
+				case 0:
+					return _nametable0Start + internalAddress;
+				case 1:
+					return _nametable1Start + internalAddress;
+				case 2:
+					return _nametable2Start + internalAddress;
+				case 3:
+					return _nametable3Start + internalAddress;
 			}
-			_prevBgColor = bgColor;
-			return _bgArr;
+			debug("Can't calculate mirrored address! " + addr + " " + internalAddress + " " + nametable);
+			return addr;
 		}
 		
-		public function startFrame():void
-		{
-			// Set background color:
-			var bgColor:uint=0;
-			
-			if (f_dispType === 0) {
-				// Color display.
-				// f_color determines color emphasis.
-				// Use first entry of image palette as BG color.
-				bgColor = imgPalette[0];
-			}
-			else {
-				// Monochrome display.
-				// f_color determines the bg color.
-				switch (f_color) {
-					case 0:
-						// Black
-						bgColor = 0x00000;
-						break;
-					case 1:
-						// Green
-						bgColor = 0x00FF00;
-						break;
-					case 2:
-						// Blue
-						bgColor = 0x0000FF;
-						break;
-					case 3:
-						// Invalid. Use black.
-						bgColor = 0x000000;
-						break;
-					case 4:
-						// Red
-						bgColor = 0xFF0000;
-						break;
-					default:
-						// Invalid. Use black.
-						bgColor = 0x0;
-				}
-			}
-			
-			var i:uint;
-			buffer = getBgArr(bgColor).concat();
-			/*
-			for (i=0; i<256*240; i++) {
-				buffer[i] = bgColor;
-			}
-			*/
-			
-			for (i=0; i<pixRendered.length; i++) {
-				pixRendered[i]=65;
-			}
-		}
+
 		
-		private function endFrame():void
+		
+		
+		
+		
+		private function drawFrame():void
 		{
-			var i:uint, x:uint, y:uint;
-			
-			// Draw spr#0 hit coordinates:
-			if (showSpr0Hit) {
-				// Spr 0 position:
-				if (sprX[0] >= 0 && sprX[0] < 256 &&
-						sprY[0] >= 0 && sprY[0] < 240) {
-					for (i=0; i<256; i++) {  
-						buffer[(sprY[0]<<8)+i] = 0x5555FF;
-					}
-					for (i=0; i<240; i++) {
-						buffer[(i<<8)+sprX[0]] = 0x5555FF;
-					}
-				}
-				// Hit position:
-				if (spr0HitX >= 0 && spr0HitX < 256 &&
-						spr0HitY >= 0 && spr0HitY < 240) {
-					for (i=0; i<256; i++) {
-						buffer[(spr0HitY<<8)+i] = 0x55FF55;
-					}
-					for (i=0; i<240; i++) {
-						buffer[(i<<8)+spr0HitX] = 0x55FF55;
-					}
-				}
-			}
-			
-			// This is a bit lazy..
-			// if either the sprites or the background should be clipped,
-			// both are clipped after rendering is finished.
-			if (clipToTvSize || f_bgClipping === 0 || f_spClipping === 0) {
-				// Clip left 8-pixels column:
-				for (y=0;y<240;y++) {
-					for (x=0;x<8;x++) {
-						buffer[(y<<8)+x] = 0;
-					}
-				}
-			}
-			
-			if (clipToTvSize) {
-				// Clip right 8-pixels column too:
-				for (y=0; y<240; y++) {
-					for (x=0; x<8; x++) {
-						buffer[(y<<8)+255-x] = 0;
-					}
-				}
-			}
-			
-			// Clip top and bottom 8 pixels:
-			if (clipToTvSize) {
-				for (y=0; y<8; y++) {
-					for (x=0; x<256; x++) {
-						buffer[(y<<8)+x] = 0;
-						buffer[((239-y)<<8)+x] = 0;
-					}
-				}
-			}
-			
+			var buffer:Vector.<uint> = new Vector.<uint>(256 * 240);
 			if (nes.options.showDisplay) {
 				nes.ui.writeFrame(buffer);
 			}
 		}
 		
-		public function updateControlReg1(addr:uint, value:uint):void
-		{	
-			nes.cpu.mem[0x2000] = value;
-			
-			triggerRendering();
-			
-			f_nmiOnVBlank =    (value>>7)&1;
-			f_spriteSize =     (value>>5)&1;
-			f_bgPatternTable = (value>>4)&1;
-			f_spPatternTable = (value>>3)&1;
-			f_addrInc =        (value>>2)&1;
-			f_nTblAddress =     value&3;
-			
-			regV = (value>>1)&1;
-			regH = value&1;
-			regS = (value>>4)&1;
-			
+		public function writeControllerReg(addr:uint, value:uint):void
+		{			
+			debug("writeControllerReg[" + addr.toString(16) + "] = " + value.toString(16));		
+			_regController = value;
 		}
 		
-		public function updateControlReg2(address:uint, value:uint):void
+		public function writeMaskReg(addr:uint, value:uint):void
 		{
-			nes.cpu.mem[0x2001] = value;
-			
-			triggerRendering();
-			
-			f_color =       (value>>5)&7;
-			f_spVisibility = (value>>4)&1;
-			f_bgVisibility = (value>>3)&1;
-			f_spClipping =   (value>>2)&1;
-			f_bgClipping =   (value>>1)&1;
-			f_dispType =      value&1;
-			
-			if (f_dispType === 0) {
-				palTable.setEmphasis(f_color);
-			}
-			updatePalettes();
-		}
-		
-		public function setStatusFlag(flag:uint, value:Boolean):void
-		{
-			var n:uint = 1<<flag;
-			nes.cpu.mem[0x2002] = 
-				((nes.cpu.mem[0x2002] & (255-n)) | (value?n:0));
+			debug("writeMaskReg[" + addr.toString(16) + "] = " + value.toString(16));
+			// TODO: Add this write to the queue to update rendering
+			_regMask = value;
 		}
 		
 		// CPU Register $2002:
 		// Read the Status Register.
 		public function readStatusRegister(addr:uint):uint
 		{	
-			var tmp:uint = nes.cpu.mem[0x2002];
+			//debug("readStatusRegister[" + addr.toString(16) + "] NOT IMPLEMENTED");	
+			// TODO: bits 0-4 should match the 'buffered' value of the PPU REGISTER line
+			var regStatus:uint = _regStatus;
 			
-			// Reset scroll & VRAM Address toggle:
-			firstWrite = true;
+			// Reading STATUS will clear the following:
+			_regStatus &= ~STATUS_VBLANK;
+			_addressLatch = false;  
 			
-			// Clear VBlank flag:
-			setStatusFlag(STATUS_VBLANK,false);
-			
-			// Fetch status data:
-			return tmp;
-			
+			return regStatus;
 		}
 		
 		// CPU Register $2003:
-		// Write the SPR-RAM address that is used for sramWrite (Register 0x2004 in CPU memory map)
-		public function writeSRAMAddress(addr:uint, value:uint):void
+		// Write the address of OAM you want to access here. Most games just write $00 here and then use OAMDMA.
+		public function writeOamAddrReg(addr:uint, value:uint):void
 		{
-			sramAddress = value;
+			debug("writeOamAddrReg[" + addr.toString(16) + "] = " + value.toString(16));
+			_oamAddress = value & 0xFF;
 		}
 		
 		// CPU Register $2004 (R):
 		// Read from SPR-RAM (Sprite RAM).
 		// The address should be set first.
-		public function sramLoad(addr:uint):uint
+		public function readOamDataReg(addr:uint):uint
 		{
-			/*short tmp = sprMem.load(sramAddress);
-			sramAddress++; // Increment address
-			sramAddress%=0x100;
-			return tmp;*/
-			return spriteMem[sramAddress];
+			var value:uint = _objectAttributeMem[_oamAddress];
+			debug("readOamDataReg[" + _oamAddress.toString(16) + "] = " + value.toString(16));	
+			return value;
 		}
 		
 		// CPU Register $2004 (W):
 		// Write to SPR-RAM (Sprite RAM).
 		// The address should be set first.
-		public function sramWrite(addr:uint, value:uint):void
-		{
-			spriteMem[sramAddress] = value;
-			spriteRamWriteUpdate(sramAddress,value);
-			sramAddress++; // Increment address
-			sramAddress %= 0x100;
+		public function writeOamDataReg(addr:uint, value:uint):void
+		{			
+			debug("writeOamDataReg[" + _oamAddress.toString(16) + "] = " + value.toString(16));
+			_objectAttributeMem[_oamAddress] = value;
 		}
 		
 		// CPU Register $2005:
 		// Write to scroll registers.
 		// The first write is the vertical offset, the second is the
 		// horizontal offset:
-		public function scrollWrite(addr:uint, value:uint):void
+		public function writeScrollReg(addr:uint, value:uint):void
 		{
-			triggerRendering();
-			
-			if (firstWrite) {
-				// First write, horizontal scroll:
-				regHT = (value>>3)&31;
-				regFH = value&7;
-				
-			}else {
-				
-				// Second write, vertical scroll:
-				regFV = value&7;
-				regVT = (value>>3)&31;
-				
-			}
-			firstWrite = !firstWrite;
-			
+			debug("writeScrollReg[" + addr.toString(16) + "] = " + value.toString(16) + " NOT IMPLEMENTED");
 		}
 		
 		// CPU Register $2006:
 		// Sets the adress used when reading/writing from/to VRAM.
 		// The first write sets the high byte, the second the low byte.
-		public function writeVRAMAddress(addr:uint, value:uint):void
+		public function writeAddressReg(addr:uint, value:uint):void
 		{
-			
-			if (firstWrite) {
-				
-				regFV = (value>>4)&3;
-				regV = (value>>3)&1;
-				regH = (value>>2)&1;
-				regVT = (regVT&7) | ((value&3)<<3);
-				
-			}else {
-				triggerRendering();
-				
-				regVT = (regVT&24) | ((value>>5)&7);
-				regHT = value&31;
-				
-				cntFV = regFV;
-				cntV = regV;
-				cntH = regH;
-				cntVT = regVT;
-				cntHT = regHT;
-				
-				checkSprite0(scanline-20);
-				
+			if (_addressLatch)
+			{
+				_regAddress &= 0xFF00;
+				_regAddress |= value;
+			}
+			else
+			{
+				_regAddress &= 0x00FF;
+				_regAddress |= (value << 8);
 			}
 			
-			firstWrite = !firstWrite;
+			// Memory is only 0-3fff, so mirror down to this range
+			_regAddress &= 0x3FFF;
 			
-			// Invoke mapper latch:
-			cntsToAddress();
-			if (vramAddress < 0x2000) {
-				nes.mmap.latchAccess(vramAddress);
-			}   
+			// Toggle address latch
+			_addressLatch = !_addressLatch;
+			
+			debug("writeVRAMAddress[" + addr.toString(16) + "] = " + value.toString(16) + " Addr = " + _regAddress.toString(16));
 		}
 		
 		// CPU Register $2007(R):
 		// Read from PPU memory. The address should be set first.
-		public function vramLoad(addr:uint):uint
+		public function readDataReg(addr:uint):uint
 		{
-			var tmp:uint;
-			
-			cntsToAddress();
-			regsToAddress();
+			var loadedData:uint;
 			
 			// If address is in range 0x0000-0x3EFF, return buffered values:
-			if (vramAddress <= 0x3EFF) {
-				tmp = vramBufferedReadValue;
-			
-				// Update buffered value:
-				if (vramAddress < 0x2000) {
-					vramBufferedReadValue = vramMem[vramAddress];
-				}
-				else {
-					vramBufferedReadValue = mirroredLoad(
-						vramAddress
-					);
-				}
-				
-				// Mapper latch access:
-				if (vramAddress < 0x2000) {
-					nes.mmap.latchAccess(vramAddress);
-				}
-				
-				// Increment by either 1 or 32, depending on d2 of Control Register 1:
-				vramAddress += (f_addrInc == 1 ? 32 : 1);
-				
-				cntsFromAddress();
-				regsFromAddress();
-				
-				return tmp; // Return the previous buffered value.
+			if (_regAddress < 0x3F00)
+			{
+				loadedData = _bufferedDataReg;
 			}
+			else // 0x3F00-0x3FFF reads palette data immediately
+			{
+				var paletteAddress:uint = (_regAddress - 0x3F00) & 0x1F;  // 20 byte palette memory
+				loadedData = _paletteMem[paletteAddress];
 				
-			// No buffering in this mem range. Read normally.
-			tmp = mirroredLoad(vramAddress);
+				debug("readDataReg[" + _regAddress.toString(16) + "=>" + paletteAddress.toString(16) + "] = " + loadedData.toString(16));
+			}
 			
-			// Increment by either 1 or 32, depending on d2 of Control Register 1:
-			vramAddress += (f_addrInc == 1 ? 32 : 1); 
+			// Set up register buffer for next read
+			var mirroredAddr:uint = calculateMirroredAddr(_regAddress);
+			_bufferedDataReg = _mem[mirroredAddr];
 			
-			cntsFromAddress();
-			regsFromAddress();
+			// Auto Increment _regAddress after read
+			_regAddress += (_regController & CTRL_VRAM_INC == 0) ? 1 : 32;
+			_regAddress &= 0x3FFF;  // Cap to real size of ram	
 			
-			return tmp;
+			return loadedData;
 		}
 		
 		// CPU Register $2007(W):
 		// Write to PPU memory. The address should be set first.
-		public function vramWrite(addr:uint, value:uint):void
+		public function writeDataReg(addr:uint, value:uint):void
 		{
-			triggerRendering();
-			cntsToAddress();
-			regsToAddress();
-			
-			if (vramAddress >= 0x2000) {
-				// Mirroring is used.
-				mirroredWrite(vramAddress,value);
-			}else {
-				
-				// Write normally.
-				writeMem(vramAddress,value);
-				
-				// Invoke mapper latch:
-				nes.mmap.latchAccess(vramAddress);
-				
+			if (_regAddress < 0x3F00)
+			{
+				var mirroredAddr:uint = calculateMirroredAddr(_regAddress);
+				//debug("writeDataReg[" + _regAddress.toString(16) + "=>" + mirroredAddr.toString(16) + "] = " + value.toString(16));
+				_mem[mirroredAddr] = value;
 			}
-			
-			// Increment by either 1 or 32, depending on d2 of Control Register 1:
-			vramAddress += (f_addrInc==1?32:1);
-			regsFromAddress();
-			cntsFromAddress();
-			
+			else
+			{
+				var paletteAddress:uint = (_regAddress - 0x3F00) & 0x1F;  // 20 byte palette memory
+				debug("writeDataReg[" + _regAddress.toString(16) + "=>" + paletteAddress.toString(16) + "] = " + value.toString(16));
+				_paletteMem[paletteAddress] = value;
+			}
 		}
 		
 		// CPU Register $4014:
 		// Write 256 bytes of main memory
 		// into Sprite RAM.
-		public function sramDMA(addr:uint, value:uint):void
+		public function writeOAMDMAReg(addr:uint, value:uint):void
 		{
+			debug("writeOAMDMAReg[" + addr.toString(16) + "] = " + value.toString(16));
+			
 			var baseAddress:uint = value * 0x100;
 			var data:uint;
-			for (var i:uint=sramAddress; i < 256; i++) {
+			for (var i:uint=_oamAddress; i < 256; i++) {
 				data = nes.cpu.mem[baseAddress+i];
-				spriteMem[i] = data;
-				spriteRamWriteUpdate(i, data);
+				_objectAttributeMem[i] = data;
 			}
 			
 			nes.cpu.haltCycles(513);
 			
 		}
 		
-		// Updates the scroll registers from a new VRAM address.
-		private function regsFromAddress():void
-		{
-			
-			var address:uint = (vramTmpAddress>>8)&0xFF;
-			regFV = (address>>4)&7;
-			regV = (address>>3)&1;
-			regH = (address>>2)&1;
-			regVT = (regVT&7) | ((address&3)<<3);
-			
-			address = vramTmpAddress&0xFF;
-			regVT = (regVT&24) | ((address>>5)&7);
-			regHT = address&31;
-		}
-		
-		// Updates the scroll registers from a new VRAM address.
-		private function cntsFromAddress():void
-		{
-			var address:uint = (vramAddress>>8)&0xFF;
-			cntFV = (address>>4)&3;
-			cntV = (address>>3)&1;
-			cntH = (address>>2)&1;
-			cntVT = (cntVT&7) | ((address&3)<<3);        
-			
-			address = vramAddress&0xFF;
-			cntVT = (cntVT&24) | ((address>>5)&7);
-			cntHT = address&31;
-			
-		}
-		
-		private function regsToAddress():void
-		{
-			var b1:uint  = (regFV&7)<<4;
-			b1 |= (regV&1)<<3;
-			b1 |= (regH&1)<<2;
-			b1 |= (regVT>>3)&3;
-			
-			var b2:uint  = (regVT&7)<<5;
-			b2 |= regHT&31;
-			
-			vramTmpAddress = ((b1<<8) | b2)&0x7FFF;
-		}
-		
-		private function cntsToAddress():void
-		{
-			var b1:uint  = (cntFV&7)<<4;
-			b1 |= (cntV&1)<<3;
-			b1 |= (cntH&1)<<2;
-			b1 |= (cntVT>>3)&3;
-			
-			var b2:uint  = (cntVT&7)<<5;
-			b2 |= cntHT&31;
-			
-			vramAddress = ((b1<<8) | b2)&0x7FFF;
-		}
-		
-		private function incTileCounter(count:uint):void
-		{
-			for (var i:uint=count; i!==0; i--) {
-				cntHT++;
-				if (cntHT == 32) {
-					cntHT = 0;
-					cntVT++;
-					if (cntVT >= 30) {
-						cntH++;
-						if(cntH == 2) {
-							cntH = 0;
-							cntV++;
-							if (cntV == 2) {
-								cntV = 0;
-								cntFV++;
-								cntFV &= 0x7;
-							}
-						}
-					}
-				}
-			}
-		}
-		
-		// Reads from memory, taking into account
-		// mirroring/mapping of address ranges.
-		private function mirroredLoad(address:uint):uint
-		{
-			return vramMem[vramMirrorTable[address]];
-		}
-		
-		// Writes to memory, taking into account
-		// mirroring/mapping of address ranges.
-		private function mirroredWrite(address:uint, value:uint):void
-		{
-			if (address>=0x3f00 && address<0x3f20) {
-				// Palette write mirroring.
-				if (address==0x3F00 || address==0x3F10) {
-					writeMem(0x3F00,value);
-					writeMem(0x3F10,value);
-					
-				}else if (address==0x3F04 || address==0x3F14) {
-					
-					writeMem(0x3F04,value);
-					writeMem(0x3F14,value);
-					
-				}else if (address==0x3F08 || address==0x3F18) {
-					
-					writeMem(0x3F08,value);
-					writeMem(0x3F18,value);
-					
-				}else if (address==0x3F0C || address==0x3F1C) {
-					
-					writeMem(0x3F0C,value);
-					writeMem(0x3F1C,value);
-					
-				}else {
-					writeMem(address,value);
-				}
-				
-			}else {
-				
-				// Use lookup table for mirrored address:
-				if (address<vramMirrorTable.length) {
-					writeMem(vramMirrorTable[address],value);
-				}else {
-					// FIXME
-					trace("Invalid VRAM address: "+address.toString(16));
-				}
-				
-			}
-		}
 		
 		public function triggerRendering():void
 		{
-			if (scanline >= 21 && scanline <= 260) {
-				// Render sprites, and combine:
-				renderFramePartially(
-					lastRenderedScanline+1,
-					scanline-21-lastRenderedScanline
-				);
-				
-				// Set last rendered scanline:
-				lastRenderedScanline = scanline-21;
-			}
+			debug("triggerRendering NOT IMPLEMENTED");
 		}
 		
-		private function renderFramePartially(startScan:uint, scanCount:uint):void
+		private function setVBlank():void
 		{
-			if (f_spVisibility == 1) {
-				renderSpritesPartially(startScan,scanCount,true);
-			}
-			
-			if(f_bgVisibility == 1) {
-				var si:uint = startScan<<8;
-				var ei:uint = (startScan+scanCount)<<8;
-				if (ei > 0xF000) {
-					ei = 0xF000;
-				}
-				
-				for (var destIndex:uint=si; destIndex<ei; destIndex++) {
-					if (pixRendered[destIndex] > 0xFF) {
-						buffer[destIndex] = bgBuffer[destIndex];
-					}
-				}
-			}
-			
-			if (f_spVisibility == 1) {
-				renderSpritesPartially(startScan, scanCount, false);
-			}
-			
-			validTileData = false;
-		}
-		
-		private function renderBgScanline(useBgBuffer:Boolean, scan:int):void
-		{
-			var baseTile:uint = (regS === 0 ? 0 : 256);
-			var destIndex:int = (scan<<8)-regFH;
-
-			curNt = ntable1[cntV+cntV+cntH];
-			
-			cntHT = regHT;
-			cntH = regH;
-			curNt = ntable1[cntV+cntV+cntH];
-			
-			if (scan<240 && (scan-cntFV)>=0){
-				
-				var tscanoffset:uint = cntFV<<3;
-				var targetBuffer:Vector.<uint> = useBgBuffer ? bgBuffer : buffer;
-
-				var t:Tile, tpix:Vector.<uint>, att:uint, col:uint;
-
-				for (var tile:uint=0;tile<32;tile++) {
-					
-					if (scan>=0) {
-					
-						// Fetch tile & attrib data:
-						if (validTileData) {
-							// Get data from array:
-							t = scantile[tile];
-							tpix = t.pix;
-							att = attrib[tile];
-						}else {
-							// Fetch data:
-							t = ptTile[baseTile+nameTable[curNt].getTileIndex(cntHT,cntVT)];
-							tpix = t.pix;
-							att = nameTable[curNt].getAttrib(cntHT,cntVT);
-							scantile[tile] = t;
-							attrib[tile] = att;
-						}
-						
-						// Render tile scanline:
-						var sx:int = 0;
-						var x:int = (tile<<3)-regFH;
-
-						if (x>-8) {
-							if (x<0) {
-								destIndex-=x;
-								sx = -x;
-							}
-							if (t.opaque[cntFV]) {
-								for (;sx<8;sx++) {
-									targetBuffer[destIndex] = imgPalette[
-										tpix[tscanoffset+sx]+att
-									];
-									pixRendered[destIndex] |= 256;
-									destIndex++;
-								}
-							}else {
-								for (;sx<8;sx++) {
-									col = tpix[tscanoffset+sx];
-									if(col !== 0) {
-										targetBuffer[destIndex] = imgPalette[
-											col+att
-										];
-										pixRendered[destIndex] |= 256;
-									}
-									destIndex++;
-								}
-							}
-						}
-						
-					}
-						
-					// Increase Horizontal Tile Counter:
-					if (++cntHT==32) {
-						cntHT=0;
-						cntH++;
-						cntH%=2;
-						curNt = ntable1[(cntV<<1)+cntH];    
-					}
-					
-					
-				}
-				
-				// Tile data for one row should now have been fetched,
-				// so the data in the array is valid.
-				validTileData = true;
-				
-			}
-			
-			// update vertical scroll:
-			cntFV++;
-			if (cntFV==8) {
-				cntFV = 0;
-				cntVT++;
-				if (cntVT==30) {
-					cntVT = 0;
-					cntV++;
-					cntV%=2;
-					curNt = ntable1[(cntV<<1)+cntH];
-				}else if (cntVT==32) {
-					cntVT = 0;
-				}
-				
-				// Invalidate fetched data:
-				validTileData = false;
-				
-			}
-		}
-		
-		private function renderSpritesPartially(startscan:uint, scancount:uint, bgPri:Boolean):void
-		{
-			if (f_spVisibility === 1) {
-				
-				for (var i:uint=0;i<64;i++) {
-					if (bgPriority[i]==bgPri && sprX[i]>=0 && 
-							sprX[i]<256 && sprY[i]+8>=startscan && 
-							sprY[i]<startscan+scancount) {
-						// Show sprite.
-						if (f_spriteSize === 0) {
-							// 8x8 sprites
-							
-							srcy1 = 0;
-							srcy2 = 8;
-							
-							if (sprY[i]<startscan) {
-								srcy1 = startscan - sprY[i]-1;
-							}
-							
-							if (sprY[i]+8 > startscan+scancount) {
-								srcy2 = startscan+scancount-sprY[i]+1;
-							}
-							
-							if (f_spPatternTable===0) {
-								ptTile[sprTile[i]].render(buffer, 
-									0, srcy1, 8, srcy2, sprX[i], 
-									sprY[i]+1, sprCol[i], sprPalette, 
-									horiFlip[i], vertFlip[i], i, 
-									pixRendered
-								);
-							}else {
-								ptTile[sprTile[i]+256].render(buffer, 0, srcy1, 8, srcy2, sprX[i], sprY[i]+1, sprCol[i], sprPalette, horiFlip[i], vertFlip[i], i, pixRendered);
-							}
-						}else {
-							// 8x16 sprites
-							var top:uint = sprTile[i];
-							if ((top&1)!==0) {
-								top = sprTile[i]-1+256;
-							}
-							
-							var srcy1:uint = 0;
-							var srcy2:uint = 8;
-							
-							if (sprY[i]<startscan) {
-								srcy1 = startscan - sprY[i]-1;
-							}
-							
-							if (sprY[i]+8 > startscan+scancount) {
-								srcy2 = startscan+scancount-sprY[i];
-							}
-							
-							ptTile[top+(vertFlip[i]?1:0)].render(
-								buffer,
-								0,
-								srcy1,
-								8,
-								srcy2,
-								sprX[i],
-								sprY[i]+1,
-								sprCol[i],
-								sprPalette,
-								horiFlip[i],
-								vertFlip[i],
-								i,
-								pixRendered
-							);
-							
-							srcy1 = 0;
-							srcy2 = 8;
-							
-							if (sprY[i]+8<startscan) {
-								srcy1 = startscan - (sprY[i]+8+1);
-							}
-							
-							if (sprY[i]+16 > startscan+scancount) {
-								srcy2 = startscan+scancount-(sprY[i]+8);
-							}
-							
-							ptTile[top+(vertFlip[i]?0:1)].render(
-								buffer,
-								0,
-								srcy1,
-								8,
-								srcy2,
-								sprX[i],
-								sprY[i]+1+8,
-								sprCol[i],
-								sprPalette,
-								horiFlip[i],
-								vertFlip[i],
-								i,
-								pixRendered
-							);
-							
-						}
-					}
-				}
-			}
-		}
-		
-		private function checkSprite0(scan:int):Boolean
-		{	
-			spr0HitX = -1;
-			spr0HitY = -1;
-			
-			var toffset:int;
-			var tIndexAdd:uint= (f_spPatternTable === 0?0:256);
-			var x:int, y:int, t:Tile, i:int;
-			var bufferIndex:int;
-			var col:uint;
-			var bgPri:Boolean;
-			
-			x = sprX[0];
-			y = sprY[0]+1;
-			
-			if (f_spriteSize === 0) {
-				// 8x8 sprites.
-
-				// Check range:
-				if (y <= scan && y + 8 > scan && x >= -7 && x < 256) {
-					
-					// Sprite is in range.
-					// Draw scanline:
-					t = ptTile[sprTile[0] + tIndexAdd];
-					col = sprCol[0];
-					bgPri = bgPriority[0];
-					
-					if (vertFlip[0]) {
-						toffset = 7 - (scan -y);
-					}
-					else {
-						toffset = scan - y;
-					}
-					toffset *= 8;
-					
-					bufferIndex = scan * 256 + x;
-					if (horiFlip[0]) {
-						for (i = 7; i >= 0; i--) {
-							if (x >= 0 && x < 256) {
-								if (bufferIndex>=0 && bufferIndex<61440 && 
-										pixRendered[bufferIndex] !==0 ) {
-									if (t.pix[toffset+i] !== 0) {
-										spr0HitX = bufferIndex % 256;
-										spr0HitY = scan;
-										return true;
-									}
-								}
-							}
-							x++;
-							bufferIndex++;
-						}
-					}
-					else {
-						for (i = 0; i < 8; i++) {
-							if (x >= 0 && x < 256) {
-								if (bufferIndex >= 0 && bufferIndex < 61440 && 
-										pixRendered[bufferIndex] !==0 ) {
-									if (t.pix[toffset+i] !== 0) {
-										spr0HitX = bufferIndex % 256;
-										spr0HitY = scan;
-										return true;
-									}
-								}
-							}
-							x++;
-							bufferIndex++;  
-						}   
-					}
-				}
-			}
-			else {
-				// 8x16 sprites:
-			
-				// Check range:
-				if (y <= scan && y + 16 > scan && x >= -7 && x < 256) {
-					// Sprite is in range.
-					// Draw scanline:
-					
-					if (vertFlip[0]) {
-						toffset = 15-(scan-y);
-					}else {
-						toffset = scan-y;
-					}
-					
-					if (toffset<8) {
-						// first half of sprite.
-						t = ptTile[sprTile[0]+(vertFlip[0]?1:0)+((sprTile[0]&1)!==0?255:0)];
-					}else {
-						// second half of sprite.
-						t = ptTile[sprTile[0]+(vertFlip[0]?0:1)+((sprTile[0]&1)!==0?255:0)];
-						if (vertFlip[0]) {
-							toffset = 15-toffset;
-						}
-						else {
-							toffset -= 8;
-						}
-					}
-					toffset*=8;
-					col = sprCol[0];
-					bgPri = bgPriority[0];
-					
-					bufferIndex = scan*256+x;
-					if (horiFlip[0]) {
-						for (i=7;i>=0;i--) {
-							if (x>=0 && x<256) {
-								if (bufferIndex>=0 && bufferIndex<61440 && pixRendered[bufferIndex]!==0) {
-									if (t.pix[toffset+i] !== 0) {
-										spr0HitX = bufferIndex%256;
-										spr0HitY = scan;
-										return true;
-									}
-								}
-							}
-							x++;
-							bufferIndex++;
-						}
-						
-					}
-					else {
-						
-						for (i=0;i<8;i++) {
-							if (x>=0 && x<256) {
-								if (bufferIndex>=0 && bufferIndex<61440 && pixRendered[bufferIndex]!==0) {
-									if (t.pix[toffset+i] !== 0) {
-										spr0HitX = bufferIndex%256;
-										spr0HitY = scan;
-										return true;
-									}
-								}
-							}
-							x++;
-							bufferIndex++;
-						}
-						
-					}
-					
-				}
-				
-			}
-			
-			return false;
-		}
-		
-		// This will write to PPU memory, and
-		// update internally buffered data
-		// appropriately.
-		private function writeMem(address:uint, value:uint):void
-		{
-			vramMem[address] = value;
-			
-			// Update internally buffered data:
-			if (address < 0x2000) {
-				vramMem[address] = value;
-				patternWrite(address,value);
-			}
-			else if (address >=0x2000 && address <0x23c0) {    
-				nameTableWrite(ntable1[0], address - 0x2000, value);
-			}
-			else if (address >=0x23c0 && address <0x2400) {    
-				attribTableWrite(ntable1[0],address-0x23c0,value);
-			}
-			else if (address >=0x2400 && address <0x27c0) {    
-				nameTableWrite(ntable1[1],address-0x2400,value);
-			}
-			else if (address >=0x27c0 && address <0x2800) {    
-				attribTableWrite(ntable1[1],address-0x27c0,value);
-			}
-			else if (address >=0x2800 && address <0x2bc0) {    
-				nameTableWrite(ntable1[2],address-0x2800,value);
-			}
-			else if (address >=0x2bc0 && address <0x2c00) {    
-				attribTableWrite(ntable1[2],address-0x2bc0,value);
-			}
-			else if (address >=0x2c00 && address <0x2fc0) {    
-				nameTableWrite(ntable1[3],address-0x2c00,value);
-			}
-			else if (address >=0x2fc0 && address <0x3000) {
-				attribTableWrite(ntable1[3],address-0x2fc0,value);
-			}
-			else if (address >=0x3f00 && address <0x3f20) {
-				updatePalettes();
-			}
-		}
-		
-		// Reads data from $3f00 to $f20 
-		// into the two buffered palettes.
-		private function updatePalettes():void
-		{
-			var i:uint;
-			
-			for (i = 0; i < 16; i++) {
-				if (f_dispType === 0) {
-					imgPalette[i] = palTable.getEntry(
-						vramMem[0x3f00 + i] & 63
-					);
-				}
-				else {
-					imgPalette[i] = palTable.getEntry(
-						vramMem[0x3f00 + i] & 32
-					);
-				}
-			}
-			for (i = 0; i < 16; i++) {
-				if (f_dispType === 0) {
-					sprPalette[i] = palTable.getEntry(
-						vramMem[0x3f10 + i] & 63
-					);
-				}
-				else {
-					sprPalette[i] = palTable.getEntry(
-						vramMem[0x3f10 + i] & 32
-					);
-				}
-			}
-		}
-		
-		// Updates the internal pattern
-		// table buffers with this new byte.
-		// In vNES, there is a version of this with 4 arguments which isn't used.
-		private function patternWrite(address:uint, value:uint):void
-		{
-			var tileIndex:uint = Math.floor(address / 16);
-			var leftOver:uint = address%16;
-			if (leftOver<8) {
-				ptTile[tileIndex].setScanline(
-					leftOver,
-					value,
-					vramMem[address+8]
-				);
-			}
-			else {
-				ptTile[tileIndex].setScanline(
-					leftOver-8,
-					vramMem[address-8],
-					value
-				);
-			}
-		}
-
-		// Updates the internal name table buffers
-		// with this new byte.
-		private function nameTableWrite(index:uint, address:uint, value:uint):void
-		{
-			nameTable[index].tile[address] = value;
-			
-			// Update Sprite #0 hit:
-			//updateSpr0Hit();
-			checkSprite0(scanline-20);
-		}
-		
-		// Updates the internal pattern
-		// table buffers with this new attribute
-		// table byte.
-		private function attribTableWrite(index:uint, address:uint, value:uint):void
-		{
-			nameTable[index].writeAttrib(address,value);
-		}
-		
-		// Updates the internally buffered sprite
-		// data with this new byte of info.
-		private function spriteRamWriteUpdate(address:uint, value:uint):void
-		{
-			var tIndex:uint = Math.floor(address / 4);
-			
-			if (tIndex === 0) {
-				//updateSpr0Hit();
-				checkSprite0(scanline - 20);
-			}
-			
-			if (address % 4 === 0) {
-				// Y coordinate
-				sprY[tIndex] = value;
-			}
-			else if (address % 4 == 1) {
-				// Tile index
-				sprTile[tIndex] = value;
-			}
-			else if (address % 4 == 2) {
-				// Attributes
-				vertFlip[tIndex] = ((value & 0x80) !== 0);
-				horiFlip[tIndex] = ((value & 0x40) !==0 );
-				bgPriority[tIndex] = ((value & 0x20) !== 0);
-				sprCol[tIndex] = (value & 3) << 2;
-				
-			}
-			else if (address % 4 == 3) {
-				// X coordinate
-				sprX[tIndex] = value;
-			}
-		}
-		
-		private function doNMI():void
-		{
+			//debug("Set VBlank");
 			// Set VBlank flag:
-			setStatusFlag(STATUS_VBLANK,true);
-			//nes.getCpu().doNonMaskableInterrupt();
-			nes.cpu.requestIrq(CPU.IRQ_NMI);
+			_regStatus |= STATUS_VBLANK;
+			
+			if (_regController & CTRL_VBLANK)
+				nes.cpu.requestIrq(CPU.IRQ_NMI);
+		}
+		
+		private function debug(msg:String):void
+		{
+			trace(this + "(" + _x + "," + _y + ") " + msg);
 		}
 	}
 }
@@ -1583,7 +458,8 @@ internal class PaletteTable
 
 	public function loadNTSCPalette():void
 	{
-		curTable = Vector.<uint>([0x525252, 0x0000B4, 0x0000A0, 0x3D00B1, 
+		curTable = Vector.<uint>([
+					0x525252, 0x0000B4, 0x0000A0, 0x3D00B1, 
 					0x690074, 0x5B0000, 0x5F0000, 0x401800, 
 					0x102F00, 0x084A08, 0x006700, 0x004212, 
 					0x00286D, 0x000000, 0x000000, 0x000000, 
@@ -1606,7 +482,8 @@ internal class PaletteTable
 	
 	private function loadPALPalette():void
 	{
-		curTable = Vector.<uint>([0x525252, 0xB40000, 0xA00000, 0xB1003D, 
+		curTable = Vector.<uint>([
+					0x525252, 0xB40000, 0xA00000, 0xB1003D, 
 					0x740069, 0x00005B, 0x00005F, 0x001840, 
 					0x002F10, 0x084A08, 0x006700, 0x124200, 
 					0x6D2800, 0x000000, 0x000000, 0x000000, 

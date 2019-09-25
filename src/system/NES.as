@@ -111,7 +111,7 @@ package system
 		
 		private function frame():void
 		{
-			ppu.startFrame();
+			trace(this + "frame");
 			var cycles:int = 0;
 			var emulateSound:Boolean = options.emulateSound;
 			
@@ -119,62 +119,21 @@ package system
 			
 			while (inFrame && isRunning)
 			{
-				// Run CPU and APU
-				if (cpu.cyclesToHalt == 0)
-				{
-					(_historyIndex == 0) ? _historyIndex = HISTORY_LENGTH - 1 : _historyIndex--;
-					cpu.cpuState = _history[_historyIndex];
-					cycles = cpu.emulate();
-				}
-				else if (cpu.cyclesToHalt > 8)
-				{
-					cycles = 8;
-					cpu.cyclesToHalt -= 8;
-				}
-				else
-				{
-					cycles = cpu.cyclesToHalt;
-					cpu.cyclesToHalt = 0;
-				}
+				cycles = cpu.emulate();
+
 				if (emulateSound && cycles > 0)
 				{
 					apu.clockFrameCounter(cycles);
 				}
-				cycles *= 3;  // Convert from CPU to NES clock cyles for PPU useage\
 				
-				// Run PPU
-				// TODO: this is bad if concurrent PPU/CPU emulation is needed
-				// TODO: Could potentially quicken things by staying in CPU emulation
-				//       until PPU interaction is needed
-				for (; cycles > 0; cycles--)
+				
+				cycles *= 3;  // Convert from CPU to NES clock cyles for PPU useage\				
+				inFrame = ppu.incrementCycles(cycles);
+				if (inFrame == false)
 				{
-					if (ppu.curX == ppu.spr0HitX &&
-						ppu.f_spVisibility == 1 &&
-						ppu.scanline - 21 == ppu.spr0HitY)
-					{
-						// Set Sprite 0 hit flag
-						ppu.setStatusFlag(PPU.STATUS_SPRITE0HIT, true);
-					}
-					
-					if (ppu.requestEndFrame)
-					{
-						ppu.nmiCounter--;
-						if (ppu.nmiCounter == 0)
-						{
-							ppu.requestEndFrame = false;
-							ppu.startVBlank();
-							inFrame = false;
-							break;
-						}
-					}
-					
-					ppu.curX++;
-					if (ppu.curX == 341)
-					{
-						ppu.curX = 0;
-						ppu.endScanLine();
-					}
-				} // end for(cycles--)
+					trace("End of Frame");
+				}
+				
 			}  // end while(inFrame)
 			
 			fpsFrameCount++;

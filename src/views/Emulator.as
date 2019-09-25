@@ -66,7 +66,7 @@ package views
 			
 			// Load ROM
 			var romLoader:RomLoader = new RomLoader();
-			//romLoader.loadFile("Super Mario Bros.nes", romLoaderCallback);
+			romLoader.loadFile("Super Mario Bros.nes", romLoaderCallback);
 			//romLoader.loadFile("Super Mario Bros 2.nes", romLoaderCallback);
 			//romLoader.loadFile("Super Mario Bros 3.nes", romLoaderCallback);
 			//romLoader.loadFile("Tetris.nes", romLoaderCallback);

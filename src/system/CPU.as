@@ -45,16 +45,17 @@ package system
 		
 		private var _opdata:Vector.<uint>;
 		private var _instructions:Vector.<Function>;
-		public var cyclesToHalt:uint;
+		public var cyclesToHalt:uint;  // Used during DMA write, memory is transfered to PPU but CPU is idle
 		private var _crash:Boolean
 		private var _irqRequested:Boolean;
 		private var _irqType:uint;
 		
-		public var cpuState:CPUState;
+		//public var cpuState:CPUState;
 		
+		public var cycles:uint;
 		public var mem:Vector.<uint>;
-		public var loadHandlers:Vector.<int>;
-		public var writeHandlers:Vector.<int>;
+		private var _loadHandlers:Vector.<int>;
+		private var _writeHandlers:Vector.<int>;
 		private var _handlerJumpTable:Vector.<Function>;
 		
 		public function CPU(nes:NES) 
@@ -71,10 +72,20 @@ package system
 			return index;
 		}
 		
+		public function assignLoadhandler(addr:uint, handler:int):void
+		{
+			_loadHandlers[addr] = handler;
+		}
+		
+		public function assignWriteHandler(addr:uint, handler:int):void
+		{
+			_writeHandlers[addr] = handler;
+		}
+		
 		public function resetHandlers():void
 		{
-			loadHandlers = new Vector.<int>(0x10000);
-			writeHandlers = new Vector.<int>(0x10000);
+			_loadHandlers = new Vector.<int>(0x10000);
+			_writeHandlers = new Vector.<int>(0x10000);
 			_handlerJumpTable = new <Function>[null];
 		}
 		
@@ -135,6 +146,7 @@ package system
 			_opdata = (new OpData()).opdata;
 			generateInstJumpTable();
 			cyclesToHalt = 0;
+			cycles = 0;
 			
 			// Reset crash flag
 			_crash = false;
@@ -156,6 +168,21 @@ package system
 		{
 			var temp:int;
 			var add:uint;
+			
+			// idle cpu during DMA
+			if (cyclesToHalt > 8)  // TODO: Determine need to break this up into 8 cycles
+			{
+				cycles += 8;
+				cyclesToHalt -= 8;
+				return 8;
+			}
+			else if (cyclesToHalt > 0)
+			{
+				cycles++;
+				cyclesToHalt--;
+				return 1;
+			}
+			
 			
 			// Check interrupts:
 			if(_irqRequested){
@@ -361,11 +388,11 @@ package system
 			// ----------------------------------------------------------------------------------------------------
 			// Decode & execute instruction:
 			// ----------------------------------------------------------------------------------------------------
-			//cycleCount = _instructions[opinf & 0xFF].apply(null, [opaddr, addr, addrMode, cycleCount, cycleAdd]);
 			cycleCount = _instructions[opinf & 0xFF](opaddr, addr, addrMode, cycleCount, cycleAdd);
 			
 			//cpuState.CYC = cycleCount;
-
+ 
+			cycles += cycleCount;
 			return cycleCount;
 		}
 		
@@ -447,7 +474,6 @@ package system
 		
 		private function instrBCS(opaddr:uint, addr:uint, addrMode:uint, cycleCount:uint, cycleAdd:uint):uint
 		{
-
 			// *******
 			// * BCS * - case 4
 			// *******
@@ -1237,23 +1263,17 @@ package system
 		private function load(addr:uint):uint
 		{
 			addr &= 0xFFFF;
-			var loadHandler:int = loadHandlers[addr];
 			
-			if (loadHandler == 0)
-			{
-				if (addr < 0x2000)
-				{
-					return mem[addr & 0x7ff];
-				}
-				else
-				{
-					return mem[addr];
-				}
-			}
-			else
-			{
-				return _handlerJumpTable[loadHandler](addr);
-			}
+			// If this is CPU memory, handle read directly
+			// CPU memory is from 0x0000 to 0x1FFF
+			if (addr & 0xE000 == 0)
+				return mem[addr & 0x07FF];  // Only 0-7FF address are real, rest are mirrored
+				
+			// Register calls and 'bouncy' cartridge memories will have a load handler assigned, otherwise read directly.
+			var loadHandler:int = _loadHandlers[addr];
+			if (loadHandler == 0) return mem[addr];
+			
+			return _handlerJumpTable[loadHandler](addr);
 		}
 		
 		private function load16bit(addr:uint):uint
@@ -1269,13 +1289,13 @@ package system
 		
 		private function write(addr:uint, val:uint):void
 		{
-			var writeHandler:int = writeHandlers[addr];
+			var writeHandler:int = _writeHandlers[addr];
 			
 			if (writeHandler == 0)
 			{
 				if (addr < 0x2000)
 				{
-					mem[addr & 0x7ff] = val;
+					mem[addr & 0x7FF] = val;
 				}
 				else
 				{
@@ -1332,18 +1352,14 @@ package system
 
 		private function doNonMaskableInterrupt(status:uint):void
 		{
-			// Check whether VBlank Interrupts are enabled
-			if ((load(0x2000) & 128) != 0) 
-			{ 
-				_reg_pc_new++;
-				push((_reg_pc_new>>8)&0xFF);
-				push(_reg_pc_new&0xFF);
-				//F_INTERRUPT_NEW = 1;
-				push(status);
+			_reg_pc_new++;
+			push((_reg_pc_new>>8)&0xFF);
+			push(_reg_pc_new&0xFF);
+			
+			push(status);
 
-				_reg_pc_new = load(0xFFFA) | (load(0xFFFB) << 8);
-				_reg_pc_new--;
-			}
+			_reg_pc_new = load(0xFFFA) | (load(0xFFFB) << 8);
+			_reg_pc_new--;
 		}
 		
 		private function doResetInterrupt():void
@@ -1468,16 +1484,16 @@ internal class OpData
 	
 	// Addressing Modes
 	private static const ADDR_ZP:uint = 			0;
-	private static const ADDR_REL:uint = 		1;
-	private static const ADDR_IMP:uint = 		2;
-	private static const ADDR_ABS:uint = 		3;
-	private static const ADDR_ACC:uint = 		4;
-	private static const ADDR_IMM:uint = 		5;
-	private static const ADDR_ZPX:uint = 		6;
-	private static const ADDR_ZPY:uint = 		7;
-	private static const ADDR_ABSX:uint =		8;
-	private static const ADDR_ABSY:uint = 		9;
-	private static const ADDR_PREIDXIND:uint = 	10;
+	private static const ADDR_REL:uint = 			1;
+	private static const ADDR_IMP:uint = 			2;
+	private static const ADDR_ABS:uint = 			3;
+	private static const ADDR_ACC:uint = 			4;
+	private static const ADDR_IMM:uint = 			5;
+	private static const ADDR_ZPX:uint = 			6;
+	private static const ADDR_ZPY:uint = 			7;
+	private static const ADDR_ABSX:uint =			8;
+	private static const ADDR_ABSY:uint = 			9;
+	private static const ADDR_PREIDXIND:uint = 		10;
 	private static const ADDR_POSTIDXIND:uint = 	11;
 	private static const ADDR_INDABS:uint = 		12;
 	
@@ -1772,28 +1788,7 @@ internal class OpData
 		setOp(INS_TXS,0x9A,ADDR_IMP,1,2);
 		
 		// TYA:
-		setOp(INS_TYA,0x98,ADDR_IMP,1,2);
-		
-		// This seems unused
-		//cycTable = new Array(
-		///*0x00*/ 7,6,2,8,3,3,5,5,3,2,2,2,4,4,6,6,
-		///*0x10*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
-		///*0x20*/ 6,6,2,8,3,3,5,5,4,2,2,2,4,4,6,6,
-		///*0x30*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
-		///*0x40*/ 6,6,2,8,3,3,5,5,3,2,2,2,3,4,6,6,
-		///*0x50*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
-		///*0x60*/ 6,6,2,8,3,3,5,5,4,2,2,2,5,4,6,6,
-		///*0x70*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
-		///*0x80*/ 2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4,
-		///*0x90*/ 2,6,2,6,4,4,4,4,2,5,2,5,5,5,5,5,
-		///*0xA0*/ 2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4,
-		///*0xB0*/ 2,5,2,5,4,4,4,4,2,4,2,4,4,4,4,4,
-		///*0xC0*/ 2,6,2,8,3,3,5,5,2,2,2,2,4,4,6,6,
-		///*0xD0*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
-		///*0xE0*/ 2,6,3,8,3,3,5,5,2,2,2,2,4,4,6,6,
-		///*0xF0*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7
-		//);
-		
+		setOp(INS_TYA,0x98,ADDR_IMP,1,2);		
 		
 		instname = new Array(56);
 		

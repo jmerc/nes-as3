@@ -46,36 +46,36 @@ package system.Mappers
 			var addr:uint;
 			
 			// PPU Register Writes (2000-3fff, bitmask 0x2007)
-			var updateControlReg1Handler:int = 	_nes.cpu.registerHandler(_nes.ppu.updateControlReg1);
-			var updateControlReg2Handler:int = 	_nes.cpu.registerHandler(_nes.ppu.updateControlReg2);
-			var sramAddrHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.writeSRAMAddress);
-			var sramWriteHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.sramWrite);
-			var scrollWriteHandler:int = 		_nes.cpu.registerHandler(_nes.ppu.scrollWrite);
-			var vramAddrHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.writeVRAMAddress);
-			var vramWriteHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.vramWrite);
+			var updateControlReg1Handler:int = 	_nes.cpu.registerHandler(_nes.ppu.writeControllerReg);
+			var updateControlReg2Handler:int = 	_nes.cpu.registerHandler(_nes.ppu.writeMaskReg);
+			var sramAddrHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.writeOamAddrReg);
+			var sramWriteHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.writeOamDataReg);
+			var scrollWriteHandler:int = 		_nes.cpu.registerHandler(_nes.ppu.writeScrollReg);
+			var vramAddrHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.writeAddressReg);
+			var vramWriteHandler:int = 			_nes.cpu.registerHandler(_nes.ppu.writeDataReg);
 			
 			for (addr = 0x2000; addr < 0x4000; addr+= 8)
 			{
-				_nes.cpu.writeHandlers[addr + 0] = updateControlReg1Handler;
-				_nes.cpu.writeHandlers[addr + 1] = updateControlReg2Handler;
+				_nes.cpu.assignWriteHandler(addr + 0, updateControlReg1Handler);
+				_nes.cpu.assignWriteHandler(addr + 1, updateControlReg2Handler);
 				// no write on addr + 2 (todo: put an intercept here to avoid writing to memory?)
-				_nes.cpu.writeHandlers[addr + 3] = sramAddrHandler;
-				_nes.cpu.writeHandlers[addr + 4] = sramWriteHandler;
-				_nes.cpu.writeHandlers[addr + 5] = scrollWriteHandler;
-				_nes.cpu.writeHandlers[addr + 6] = vramAddrHandler;
-				_nes.cpu.writeHandlers[addr + 7] = vramWriteHandler;
+				_nes.cpu.assignWriteHandler(addr + 3, sramAddrHandler);
+				_nes.cpu.assignWriteHandler(addr + 4 , sramWriteHandler);
+				_nes.cpu.assignWriteHandler(addr + 5, scrollWriteHandler);
+				_nes.cpu.assignWriteHandler(addr + 6, vramAddrHandler);
+				_nes.cpu.assignWriteHandler(addr + 7, vramWriteHandler);
 			}
 			
 			// Direct register writes (4000-4017)
 			var apuWriteHandler:int = _nes.cpu.registerHandler(_nes.apu.writeReg);
 			for (addr = 0x4000; addr <= 0x4013; addr++)
 			{
-				_nes.cpu.writeHandlers[addr] = apuWriteHandler;
+				_nes.cpu.assignWriteHandler(addr, apuWriteHandler);
 			}
-			_nes.cpu.writeHandlers[0x4014] = _nes.cpu.registerHandler(_nes.ppu.sramDMA);
-			_nes.cpu.writeHandlers[0x4015] = apuWriteHandler;
-			_nes.cpu.writeHandlers[0x4016] = _nes.cpu.registerHandler(joyWrite);
-			_nes.cpu.writeHandlers[0x4017] = apuWriteHandler;  // TODO: Break out apu write handlers
+			_nes.cpu.assignWriteHandler(0x4014, _nes.cpu.registerHandler(_nes.ppu.writeOAMDMAReg));
+			_nes.cpu.assignWriteHandler(0x4015, apuWriteHandler);
+			_nes.cpu.assignWriteHandler(0x4016, _nes.cpu.registerHandler(joyWrite));
+			_nes.cpu.assignWriteHandler(0x4017, apuWriteHandler);  // TODO: Break out apu write handlers
 		}
 		
 		private function joyWrite(address:uint, value:uint):void
@@ -86,87 +86,8 @@ package system.Mappers
 				_joy2StrobeState = 0;
 			}
 			_joypadLastWrite = value;
-		}
+		}		
 		
-		private function writePPURegister(address:uint, value:uint):void
-		{
-			address = 0x2000 + (address & 0x7);
-			switch (address)
-			{
-				case 0x2000:
-					// PPU Control register 1
-					_nes.ppu.updateControlReg1(address, value);
-					break;
-				
-				case 0x2001:
-					// PPU Control register 2
-					_nes.ppu.updateControlReg2(address, value);
-					break;
-				
-				case 0x2003:
-					// Set Sprite RAM address:
-					_nes.ppu.writeSRAMAddress(address, value);
-					break;
-				
-				case 0x2004:
-					// Write to Sprite RAM:
-					_nes.ppu.sramWrite(address, value);
-					break;
-				
-				case 0x2005:
-					// Screen Scroll offsets:
-					_nes.ppu.scrollWrite(address, value);
-					break;
-				
-				case 0x2006:
-					// Set VRAM address:
-					_nes.ppu.writeVRAMAddress(address, value);
-					break;
-				
-				case 0x2007:
-					// Write to VRAM:
-					_nes.ppu.vramWrite(address, value);
-					break;
-			}
-		}
-		
-		
-		private function regWrite(address:uint, value:uint):void
-		{
-			switch (address) {
-				case 0x4014:
-					// Sprite Memory DMA Access
-					_nes.ppu.sramDMA(0x4014, value);
-					break;
-				
-				case 0x4015:
-					// Sound Channel Switch, DMC Status
-					_nes.apu.writeReg(address, value);
-					break;
-				
-				case 0x4016:
-					// Joystick 1 + Strobe
-					if ((value&1) === 0 && (_joypadLastWrite&1) === 1) {
-						_joy1StrobeState = 0;
-						_joy2StrobeState = 0;
-					}
-					_joypadLastWrite = value;
-					break;
-				
-				case 0x4017:
-					// Sound channel frame sequencer:
-					_nes.apu.writeReg(address, value);
-					break;
-				
-				default:
-					// Sound registers
-					////System.out.println("write to sound reg");
-					if (address >= 0x4000 && address <= 0x4017) {
-						_nes.apu.writeReg(address,value);
-					}
-			}
-		}
-
 		
 		
 		protected function registerLoadHandlers():void
@@ -175,29 +96,29 @@ package system.Mappers
 			
 			var readZeroHandler:int = _nes.cpu.registerHandler(readZero);
 			var readStatusHandler:int = _nes.cpu.registerHandler(_nes.ppu.readStatusRegister);
-			var sramLoadHandler:int = _nes.cpu.registerHandler(_nes.ppu.sramLoad);
-			var vramLoadHandler:int = _nes.cpu.registerHandler(_nes.ppu.vramLoad);
+			var sramLoadHandler:int = _nes.cpu.registerHandler(_nes.ppu.readOamDataReg);
+			var vramLoadHandler:int = _nes.cpu.registerHandler(_nes.ppu.readDataReg);
 			
 			// PPU Register Loads (0x2000-0x3FFF, bitmask 0x2007)
 			for (addr = 0x2000; addr < 0x4000; addr += 8)
 			{
 				// addr+0, addr+1 are stored in local cpu memory (not on actual NES)
-				_nes.cpu.loadHandlers[addr + 2] = readStatusHandler;
-				_nes.cpu.loadHandlers[addr + 3] = readZeroHandler;
-				_nes.cpu.loadHandlers[addr + 4] = sramLoadHandler
-				_nes.cpu.loadHandlers[addr + 5] = readZeroHandler;
-				_nes.cpu.loadHandlers[addr + 6] = readZeroHandler;
-				_nes.cpu.loadHandlers[addr + 7] = vramLoadHandler;				
+				_nes.cpu.assignLoadhandler(addr + 2, readStatusHandler);
+				_nes.cpu.assignLoadhandler(addr + 3, readZeroHandler);
+				_nes.cpu.assignLoadhandler(addr + 4, sramLoadHandler);
+				_nes.cpu.assignLoadhandler(addr + 5, readZeroHandler);
+				_nes.cpu.assignLoadhandler(addr + 6, readZeroHandler);
+				_nes.cpu.assignLoadhandler(addr + 7, vramLoadHandler);				
 			}
 				
 			// APU/Misc Registers (0x4000-0x4017)
 			for (addr = 0x4000; addr <= 0x4014; addr++)
     		{
-				_nes.cpu.loadHandlers[addr] = readZeroHandler;
+				_nes.cpu.assignLoadhandler(addr, readZeroHandler);
 			}
-			_nes.cpu.loadHandlers[0x4015] = _nes.cpu.registerHandler(_nes.apu.readReg);
-			_nes.cpu.loadHandlers[0x4016] = _nes.cpu.registerHandler(joy1Read);
-			_nes.cpu.loadHandlers[0x4017] = _nes.cpu.registerHandler(joy2Read);
+			_nes.cpu.assignLoadhandler(0x4015, _nes.cpu.registerHandler(_nes.apu.readReg));
+			_nes.cpu.assignLoadhandler(0x4016, _nes.cpu.registerHandler(joy1Read));
+			_nes.cpu.assignLoadhandler(0x4017, _nes.cpu.registerHandler(joy2Read));
 		}
 		
 		private function readZero(address:uint):uint
@@ -308,7 +229,6 @@ package system.Mappers
 			loadBatteryRam();
 		
 			// Reset IRQ:
-			//nes.getCpu().doResetInterrupt();
 			_nes.cpu.requestIrq(CPU.IRQ_RESET);
 		}
 
@@ -358,39 +278,36 @@ package system.Mappers
 
 		protected function loadRomBank(bank:uint, address:uint):void
 		{
-			//trace(this + "loadRomBank: " + bank + " - " + address.toString(16));
+			trace(this + "loadRomBank: " + bank + " - " + address.toString(16));
 			// Loads a ROM bank into the specified address.
 			bank %= _nes.rom.romCount;
-			//var data = this.nes.rom.rom[bank];
-			//cpuMem.write(address,data,data.length);
+			
 			ArrayUtils.copyArrayElements(_nes.rom.rom[bank], 0, _nes.cpu.mem, address, 16384);
 		}
 
 		protected function loadVromBank(bank:uint, address:uint):void
 		{
-			//trace(this + "loadVromBank: " + bank + " - " + address.toString(16));
+			trace(this + "loadVromBank: " + bank + " - " + address.toString(16));
 			if (_nes.rom.vromCount === 0) {
 				return;
 			}
 			_nes.ppu.triggerRendering();
 		
 			ArrayUtils.copyArrayElements(_nes.rom.vrom[bank % _nes.rom.vromCount], 
-				0, _nes.ppu.vramMem, address, 4096);
-		
-			var vromTile:Vector.<Tile> = _nes.rom.vromTile[bank % _nes.rom.vromCount];
-			ArrayUtils.copyArrayElements(vromTile, 0, _nes.ppu.ptTile,address >> 4, 256);
+				0, _nes.ppu.memory, address, 0x1000);
 		}
 
 		protected function load32kRomBank(bank:uint, address:uint):void
 		{
-			//trace(this + "load32kRomBank: " + bank + " - " + address.toString(16));
+			trace(this + "load32kRomBank: " + bank + " - " + address.toString(16));
 			loadRomBank((bank*2) % _nes.rom.romCount, address);
 			loadRomBank((bank*2+1) % _nes.rom.romCount, address+16384);
 		}
 
+
 		protected function load8kVromBank(bank4kStart:uint, address:uint):void
 		{
-			//trace(this + "load8kVromBank: " + bank4kStart + " - " + address.toString(16));
+			trace(this + "load8kVromBank: " + bank4kStart + " - " + address.toString(16));
 			if (_nes.rom.vromCount === 0) {
 				return;
 			}
@@ -400,10 +317,10 @@ package system.Mappers
 			loadVromBank((bank4kStart + 1) % _nes.rom.vromCount,
 					address + 4096);
 		}
-
+		
 		protected function load1kVromBank(bank1k:uint, address:uint):void
 		{
-			//trace(this + "load1kVromBank: " + bank1k + " - " + address.toString(16));
+			trace(this + "load1kVromBank: " + bank1k + " - " + address.toString(16));
 			if (_nes.rom.vromCount === 0) {
 				return;
 			}
@@ -412,19 +329,12 @@ package system.Mappers
 			var bank4k:uint = Math.floor(bank1k / 4) % _nes.rom.vromCount;
 			var bankoffset:uint = (bank1k % 4) * 1024;
 			ArrayUtils.copyArrayElements(_nes.rom.vrom[bank4k], 0, 
-				_nes.ppu.vramMem, bankoffset, 1024);
-		
-			// Update tiles:
-			var vromTile:Vector.<Tile> = _nes.rom.vromTile[bank4k];
-			var baseIndex:uint = address >> 4;
-			for (var i:uint = 0; i < 64; i++) {
-				_nes.ppu.ptTile[baseIndex+i] = vromTile[((bank1k%4) << 6) + i];
-			}
+				_nes.ppu.memory, bankoffset, 1024);
 		}
 
 		private function load2kVromBank(bank2k:uint, address:uint):void
 		{
-			//trace(this + "load2kVromBank: " + bank2k + " - " + address.toString(16));
+			trace(this + "load2kVromBank: " + bank2k + " - " + address.toString(16));
 			if (_nes.rom.vromCount === 0) {
 				return;
 			}
@@ -433,19 +343,12 @@ package system.Mappers
 			var bank4k:uint = Math.floor(bank2k / 2) % _nes.rom.vromCount;
 			var bankoffset:uint = (bank2k % 2) * 2048;
 			ArrayUtils.copyArrayElements(_nes.rom.vrom[bank4k], bankoffset,
-				_nes.ppu.vramMem, address, 2048);
-		
-			// Update tiles:
-			var vromTile:Vector.<Tile> = _nes.rom.vromTile[bank4k];
-			var baseIndex:uint = address >> 4;
-			for (var i:uint = 0; i < 128; i++) {
-				_nes.ppu.ptTile[baseIndex+i] = vromTile[((bank2k%2) << 7) + i];
-			}
+				_nes.ppu.memory, address, 2048);
 		}
-
+		
 		protected function load8kRomBank(bank8k:uint, address:uint):void
 		{
-			//trace(this + "load8kRomBank: " + bank8k + " - " + address.toString(16));
+			trace(this + "load8kRomBank: " + bank8k + " - " + address.toString(16));
 			var bank16k:uint = Math.floor(bank8k / 2) % _nes.rom.romCount;
 			var offset:uint = (bank8k % 2) * 8192;
 		

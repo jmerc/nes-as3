@@ -21,7 +21,7 @@ package system.Mappers
 			var mmcRegWriteHandler:int = _nes.cpu.registerHandler(mmcRegWrite);
 			for (var addr:uint = 0x8000; addr < 0x10000; addr++)
 			{
-				_nes.cpu.writeHandlers[addr] = mmcRegWriteHandler;
+				_nes.cpu.assignWriteHandler(addr, mmcRegWriteHandler);
 			}
 		}
 
